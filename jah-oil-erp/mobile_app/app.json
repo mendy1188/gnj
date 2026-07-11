@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Jah Mobile App",
+    "slug": "jah-mobile-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "jahmobile",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Jah Mobile App to scan cashier QR codes for fuel checkout."
+        }
+      ],
+      "expo-secure-store",
+      "@react-native-community/datetimepicker"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jahoil.mobile"
+    },
+    "android": {
+      "package": "com.jahoil.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

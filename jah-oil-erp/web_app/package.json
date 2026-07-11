@@ -1,0 +1,35 @@
+{
+  "name": "starter-for-nextjs",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "appwrite:schema": "node scripts/create-appwrite-schema.mjs",
+    "appwrite:seed": "node scripts/seed-appwrite-records.mjs",
+    "appwrite:reset-seed": "node scripts/reset-and-seed-appwrite-records.mjs",
+    "appwrite:backfill-summaries": "node scripts/backfill-appwrite-summaries.mjs",
+    "appwrite:seed-ban-bri-team": "node scripts/seed-banjul-brikama-team-records.mjs",
+    "appwrite:seed-rest-stations-recent": "node scripts/seed-remaining-stations-recent-records.mjs"
+  },
+  "dependencies": {
+    "@appwrite.io/pink-icons": "^1.0.0",
+    "@tailwindcss/postcss": "^4.1.11",
+    "appwrite": "^18.1.1",
+    "leaflet": "^1.9.4",
+    "next": "^15.4.8",
+    "postcss": "^8.5.6",
+    "qrcode": "^1.5.4",
+    "react": "^19.1.2",
+    "react-dom": "^19.1.2",
+    "react-icons": "^5.7.0",
+    "react-leaflet": "^5.0.0",
+    "tailwindcss": "^4.1.11"
+  },
+  "devDependencies": {
+    "prettier": "3.6.2",
+    "prettier-plugin-tailwindcss": "^0.6.14"
+  }
+}
