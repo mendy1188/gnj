@@ -10,6 +10,13 @@ import { dashboardNavigation } from "@/features/dashboard/constants";
 const SIDEBAR_GROUPS_STORAGE_KEY = "jah-erp-sidebar-open-groups";
 const SIDEBAR_SCROLL_STORAGE_KEY = "jah-erp-sidebar-scroll-top";
 const SIDEBAR_NAVIGATION_STORAGE_KEY = "jah-erp-sidebar-navigation";
+const SIDEBAR_NAVIGATION_STORAGE_VERSION = dashboardNavigation
+  .map((item) =>
+    Array.isArray(item.children)
+      ? `${item.key}:${item.children.map((child) => child.key).join(",")}`
+      : item.key,
+  )
+  .join("|");
 
 function isActiveRoute(pathname, href) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -113,6 +120,7 @@ function readStoredNavigationItems(sessionUserId) {
     if (
       !parsedValue ||
       typeof parsedValue !== "object" ||
+      parsedValue.version !== SIDEBAR_NAVIGATION_STORAGE_VERSION ||
       parsedValue.userId !== sessionUserId ||
       !Array.isArray(parsedValue.items)
     ) {
@@ -134,6 +142,7 @@ function writeStoredNavigationItems(sessionUserId, items) {
     window.sessionStorage.setItem(
       SIDEBAR_NAVIGATION_STORAGE_KEY,
       JSON.stringify({
+        version: SIDEBAR_NAVIGATION_STORAGE_VERSION,
         userId: sessionUserId,
         items,
       }),

@@ -530,19 +530,19 @@ async function syncCreditReceiptStatuses(
   databaseId,
   { accountId, nextBalance },
 ) {
-  const movementResponse = await databases.listDocuments(
+  const movements = await listAllDocuments(
+    databases,
     databaseId,
     COLLECTIONS.customerBalanceMovements,
     [
       Query.equal("account_id", accountId),
       Query.equal("account_type", "credit"),
-      Query.limit(5000),
     ],
   );
 
   const receiptIds = Array.from(
     new Set(
-      (movementResponse.documents || [])
+      movements
         .map((document) => `${document.receipt_id || ""}`.trim())
         .filter(Boolean),
     ),
@@ -570,4 +570,31 @@ async function syncCreditReceiptStatuses(
       ),
     );
   }
+}
+
+async function listAllDocuments(databases, databaseId, collectionId, queries = []) {
+  const documents = [];
+  let offset = 0;
+  let total = Number.POSITIVE_INFINITY;
+  const pageLimit = 100;
+
+  while (documents.length < total) {
+    const response = await databases.listDocuments(databaseId, collectionId, [
+      ...queries,
+      Query.limit(pageLimit),
+      Query.offset(offset),
+    ]);
+    const batch = response.documents || [];
+
+    documents.push(...batch);
+    total = response.total ?? batch.length;
+
+    if (batch.length < pageLimit) {
+      break;
+    }
+
+    offset += pageLimit;
+  }
+
+  return documents;
 }

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { changePasswordAction } from "@/features/auth/actions";
 import { getCurrentSession } from "@/features/auth/server";
+import ToastMessage from "@/components/ui/ToastMessage";
 
 export default async function ChangePasswordPage({ searchParams }) {
   const session = await getCurrentSession();
@@ -26,11 +27,7 @@ export default async function ChangePasswordPage({ searchParams }) {
           </p>
         </div>
 
-        {error ? (
-          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {error}
-          </div>
-        ) : null}
+        <ToastMessage message={error} tone="error" />
 
         <form action={changePasswordAction} className="space-y-4">
           <div>
@@ -69,7 +66,7 @@ export default async function ChangePasswordPage({ searchParams }) {
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-sky-600 py-3 font-semibold text-white transition hover:bg-sky-700"
+            className="w-full cursor-pointer rounded-xl bg-sky-600 py-3 font-semibold text-white transition hover:bg-sky-700"
           >
             Save new password
           </button>

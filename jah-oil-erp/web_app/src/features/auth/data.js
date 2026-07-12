@@ -272,15 +272,38 @@ export async function createUserRecord({
   return normalizeUserDocument(document);
 }
 
-export async function updateUserPassword(userId, passwordHash) {
+export async function updateUserPassword(
+  userId,
+  passwordHash,
+  { mustChangePassword = false } = {},
+) {
   const { databases, databaseId } = createDatabasesClient();
   const document = await databases.updateDocument(databaseId, COLLECTIONS.users, userId, {
     password_hash: passwordHash,
-    must_change_password: false,
+    must_change_password: mustChangePassword,
     updated_at: new Date().toISOString(),
   });
 
   return normalizeUserDocument(document);
+}
+
+export async function updateUserStatus(userId, status) {
+  const normalizedStatus = ["active", "inactive"].includes(status)
+    ? status
+    : "inactive";
+  const { databases, databaseId } = createDatabasesClient();
+  const document = await databases.updateDocument(databaseId, COLLECTIONS.users, userId, {
+    status: normalizedStatus,
+    updated_at: new Date().toISOString(),
+  });
+
+  return normalizeUserDocument(document);
+}
+
+export async function deleteUserRecord(userId) {
+  const { databases, databaseId } = createDatabasesClient();
+
+  await databases.deleteDocument(databaseId, COLLECTIONS.users, userId);
 }
 
 export async function updateRoleModules(roleId, modules) {

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import DataTable from "@/components/dashboard/DataTable";
+import ToastMessage from "@/components/ui/ToastMessage";
 import DashboardPageShell from "@/features/dashboard/page-shell";
 import {
   buildBulkFuelClientRows,
@@ -416,17 +417,11 @@ export default function BulkFuelPurchaseSettingsPageClient({
       description="Add bulk fuel clients, keep their contact details updated, and create new funded fuel purchases for later redemption."
       {...shellProps}
     >
-      {feedback?.message ? (
-        <div
-          className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
-            feedback.success
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-rose-200 bg-rose-50 text-rose-700"
-          }`}
-        >
-          {feedback.message}
-        </div>
-      ) : null}
+      <ToastMessage
+        message={feedback?.message || ""}
+        tone={feedback?.success ? "success" : feedback ? "error" : "info"}
+        onClose={() => setFeedback(null)}
+      />
 
       {!selectedClient ? (
         <>

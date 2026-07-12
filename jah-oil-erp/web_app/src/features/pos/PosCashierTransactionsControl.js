@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppIcon } from "@/components/ui/AppIcon";
+import ToastMessage from "@/components/ui/ToastMessage";
 import { getUserFacingErrorMessage } from "@/features/errors/copy";
 import {
   getPosSyncPanelSnapshot,
@@ -421,28 +422,26 @@ export default function PosCashierTransactionsControl({
           </div>
 
           <div className="max-h-[70vh] overflow-y-auto px-4 py-4">
-            {feedback?.message ? (
-              <div
-                className={`mb-4 rounded-2xl border px-4 py-3 text-sm font-medium ${
-                  feedback.tone === "success"
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : feedback.tone === "warning"
-                      ? "border-amber-200 bg-amber-50 text-amber-700"
-                      : "border-rose-200 bg-rose-50 text-rose-700"
-                }`}
-              >
-                {feedback.message}
-              </div>
-            ) : null}
+            <ToastMessage
+              message={feedback?.message || ""}
+              tone={
+                feedback?.tone === "success"
+                  ? "success"
+                  : feedback?.tone === "warning"
+                    ? "warning"
+                    : feedback
+                      ? "error"
+                      : "info"
+              }
+              onClose={() => setFeedback(null)}
+            />
 
             {isLoading ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-600">
                 Loading transactions…
               </div>
             ) : error ? (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-5 text-sm text-rose-700">
-                {error}
-              </div>
+              <ToastMessage message={error} tone="error" onClose={() => setError("")} />
             ) : (
               <>
                 <div className="mb-4 grid gap-3 sm:grid-cols-2">

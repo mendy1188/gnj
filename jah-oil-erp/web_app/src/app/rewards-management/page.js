@@ -1,5 +1,6 @@
 import DashboardPageShell from "@/features/dashboard/page-shell";
 import DashboardErrorFallback from "@/features/errors/DashboardErrorFallback";
+import ToastMessage from "@/components/ui/ToastMessage";
 import { buildDashboardShellProps } from "@/features/auth/shell";
 import { requireModuleAccess } from "@/features/auth/server";
 import {
@@ -17,22 +18,6 @@ import { saveRewardSettingsAction } from "./actions";
 import RewardsManagementPageClient from "./page-client";
 
 export const dynamic = "force-dynamic";
-
-function StatusBanner({ error, success }) {
-  if (!error && !success) {
-    return null;
-  }
-
-  const tone = error
-    ? "border-rose-200 bg-rose-50 text-rose-700"
-    : "border-emerald-200 bg-emerald-50 text-emerald-700";
-
-  return (
-    <div className={`rounded-2xl border px-4 py-3 text-sm font-medium ${tone}`}>
-      {error || success}
-    </div>
-  );
-}
 
 function normalizeComparable(value) {
   return `${value || ""}`.trim().toLowerCase();
@@ -137,7 +122,10 @@ export default async function RewardsManagementPage({ searchParams }) {
       description="Manage client app users, reward balances, and the cash back percentage applied on client fuel purchases."
       {...shellProps}
     >
-      <StatusBanner error={error} success={success} />
+      <ToastMessage
+        message={error || success}
+        tone={error ? "error" : success ? "success" : "info"}
+      />
 
       <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-[0_20px_80px_rgba(15,23,42,0.05)]">
         <div className="grid gap-6 xl:grid-cols-12">

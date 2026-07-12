@@ -5,8 +5,12 @@ import { redirect } from "next/navigation";
 
 import {
   createUserRecord,
+  deleteUserRecord,
+  getUserById,
   getRoleById,
   updateRoleModules,
+  updateUserPassword,
+  updateUserStatus,
 } from "@/features/auth/data";
 import { hashPassword } from "@/features/auth/password";
 import { requireModuleAccess } from "@/features/auth/server";
@@ -22,6 +26,19 @@ function toAdminUrl(params = {}) {
 
   const query = searchParams.toString();
   return query ? `/admin?${query}` : "/admin";
+}
+
+function revalidateAdminRoutes() {
+  revalidatePath("/admin");
+  revalidatePath("/", "layout");
+}
+
+async function loadUserForAdmin(userId) {
+  try {
+    return await getUserById(userId);
+  } catch {
+    return null;
+  }
 }
 
 export async function createUserAction(formData) {
@@ -66,8 +83,114 @@ export async function createUserAction(formData) {
     throw error;
   }
 
-  revalidatePath("/admin");
+  revalidateAdminRoutes();
   redirect(toAdminUrl({ success: "User created successfully." }));
+}
+
+export async function resetUserPasswordAction(formData) {
+  await requireModuleAccess("admin");
+
+  const userId = String(formData.get("userId") || "").trim();
+  const password = String(formData.get("password") || "");
+
+  if (!userId || password.length < 8) {
+    return {
+      success: false,
+      message:
+        "Select a user and enter a temporary password of at least 8 characters.",
+    };
+  }
+
+  const user = await loadUserForAdmin(userId);
+
+  if (!user) {
+    return {
+      success: false,
+      message: "Selected user could not be found.",
+    };
+  }
+
+  const updatedUser = await updateUserPassword(user.id, hashPassword(password), {
+    mustChangePassword: true,
+  });
+  return {
+    success: true,
+    message: `${user.fullName || "User"} password reset. They must change it at next sign-in.`,
+    user: updatedUser,
+  };
+}
+
+export async function updateUserStatusAction(formData) {
+  const session = await requireModuleAccess("admin");
+
+  const userId = String(formData.get("userId") || "").trim();
+  const status = String(formData.get("status") || "").trim().toLowerCase();
+
+  if (!userId || !["active", "inactive"].includes(status)) {
+    return {
+      success: false,
+      message: "Select a valid user status.",
+    };
+  }
+
+  if (userId === session.userId && status !== "active") {
+    return {
+      success: false,
+      message: "You cannot deactivate your own account.",
+    };
+  }
+
+  const user = await loadUserForAdmin(userId);
+
+  if (!user) {
+    return {
+      success: false,
+      message: "Selected user could not be found.",
+    };
+  }
+
+  const updatedUser = await updateUserStatus(user.id, status);
+  return {
+    success: true,
+    message: `${user.fullName || "User"} status changed to ${status}.`,
+    user: updatedUser,
+  };
+}
+
+export async function deleteUserAction(formData) {
+  const session = await requireModuleAccess("admin");
+
+  const userId = String(formData.get("userId") || "").trim();
+
+  if (!userId) {
+    return {
+      success: false,
+      message: "Select a user to delete.",
+    };
+  }
+
+  if (userId === session.userId) {
+    return {
+      success: false,
+      message: "You cannot delete your own account.",
+    };
+  }
+
+  const user = await loadUserForAdmin(userId);
+
+  if (!user) {
+    return {
+      success: false,
+      message: "Selected user could not be found.",
+    };
+  }
+
+  await deleteUserRecord(user.id);
+  return {
+    success: true,
+    message: `${user.fullName || "User"} was deleted.`,
+    deletedUserId: user.id,
+  };
 }
 
 export async function updateRoleModulesAction(formData) {
@@ -84,6 +207,6 @@ export async function updateRoleModulesAction(formData) {
   }
 
   await updateRoleModules(roleId, modules);
-  revalidatePath("/admin");
+  revalidateAdminRoutes();
   redirect(toAdminUrl({ success: "Role permissions updated." }));
 }

@@ -11,6 +11,7 @@
     "appwrite:seed": "node scripts/seed-appwrite-records.mjs",
     "appwrite:reset-seed": "node scripts/reset-and-seed-appwrite-records.mjs",
     "appwrite:backfill-summaries": "node scripts/backfill-appwrite-summaries.mjs",
+    "appwrite:repair-pos-envelopes": "node scripts/repair-pos-transaction-envelopes.mjs",
     "appwrite:seed-ban-bri-team": "node scripts/seed-banjul-brikama-team-records.mjs",
     "appwrite:seed-rest-stations-recent": "node scripts/seed-remaining-stations-recent-records.mjs"
   },

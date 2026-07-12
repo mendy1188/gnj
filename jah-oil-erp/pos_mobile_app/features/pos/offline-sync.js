@@ -1,17 +1,24 @@
-import { syncMobilePosSale } from "../auth/api";
+import {
+  reportMobilePosDeviceSyncStatus,
+  syncMobilePosSale,
+} from "../auth/api";
 import { getUserFacingErrorMessage } from "../errors/messages";
 import storage from "../storage/local-storage";
+import offlineQueue from "./offline-queue";
 
-const POS_PENDING_SALES_KEY = "jah_pos_mobile_pending_sales_v1";
 const POS_LAST_SYNCED_AT_KEY = "jah_pos_mobile_last_synced_at_v1";
 const POS_SYNC_ACTIVITY_KEY = "jah_pos_mobile_sync_activity_v1";
 const POS_BOOTSTRAP_CACHE_KEY = "jah_pos_mobile_bootstrap_v1";
+const POS_DEVICE_ID_KEY = "jah_pos_mobile_device_id_v1";
 const POS_SYNC_ACTIVITY_LIMIT = 120;
 const POS_SYNC_RETRY_BASE_DELAY_MS = 5000;
 const POS_SYNC_RETRY_MAX_DELAY_MS = 5 * 60 * 1000;
+const POS_DEVICE_STATUS_HEARTBEAT_MS = 5 * 60 * 1000;
 
 let isSyncing = false;
 let lastKnownOnline = true;
+let lastDeviceStatusReportAt = 0;
+let lastDeviceStatusReportSignature = "";
 const listeners = new Set();
 
 function emitStatus() {
@@ -67,12 +74,11 @@ function safeParseJson(value, fallbackValue) {
 }
 
 async function loadPendingPosSales() {
-  const raw = await storage.getItem(POS_PENDING_SALES_KEY);
-  return Array.isArray(safeParseJson(raw, [])) ? safeParseJson(raw, []) : [];
+  return offlineQueue.loadPendingPosSales();
 }
 
 async function savePendingPosSales(queue) {
-  await storage.setItem(POS_PENDING_SALES_KEY, JSON.stringify(queue));
+  await offlineQueue.savePendingPosSales(queue);
   emitStatus();
 }
 
@@ -112,6 +118,153 @@ async function saveLastSyncedAt(value) {
   }
 }
 
+async function getPosDeviceId() {
+  const existingDeviceId = `${(await storage.getItem(POS_DEVICE_ID_KEY)) || ""}`.trim();
+
+  if (existingDeviceId) {
+    return existingDeviceId;
+  }
+
+  const deviceId = `mpos_${createClientSaleId()}`;
+  await storage.setItem(POS_DEVICE_ID_KEY, deviceId);
+
+  return deviceId;
+}
+
+function getNormalizedDateFromEntry(entry, keys) {
+  for (const key of keys) {
+    const normalizedDate = normalizeSaleDate(entry?.[key]);
+
+    if (normalizedDate) {
+      return normalizedDate;
+    }
+  }
+
+  const payload = entry?.payload || {};
+
+  for (const key of keys) {
+    const normalizedDate = normalizeSaleDate(payload?.[key]);
+
+    if (normalizedDate) {
+      return normalizedDate;
+    }
+  }
+
+  return "";
+}
+
+function getOldestDateValue(entries, keys) {
+  return (Array.isArray(entries) ? entries : [])
+    .map((entry) => getNormalizedDateFromEntry(entry, keys))
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right))[0] || "";
+}
+
+function getLatestDateValue(entries, keys) {
+  return (Array.isArray(entries) ? entries : [])
+    .map((entry) => getNormalizedDateFromEntry(entry, keys))
+    .filter(Boolean)
+    .sort((left, right) => right.localeCompare(left))[0] || "";
+}
+
+function getLatestErrorValue(activity, queue) {
+  return [...(Array.isArray(activity) ? activity : []), ...(Array.isArray(queue) ? queue : [])]
+    .filter((entry) => `${entry?.lastError || ""}`.trim())
+    .sort((left, right) =>
+      `${right?.lastAttemptAt || right?.updatedAt || right?.queuedAt || ""}`.localeCompare(
+        `${left?.lastAttemptAt || left?.updatedAt || left?.queuedAt || ""}`,
+      ),
+    )[0]?.lastError || "";
+}
+
+function buildDeviceStatusSignature(payload) {
+  return JSON.stringify({
+    deviceId: payload.deviceId,
+    platform: payload.platform,
+    stationId: payload.stationId,
+    stationName: payload.stationName,
+    cashierName: payload.cashierName,
+    pendingCount: payload.pendingCount,
+    failedCount: payload.failedCount,
+    needsReviewCount: payload.needsReviewCount,
+    oldestUnsyncedAt: payload.oldestUnsyncedAt,
+    lastSyncAttemptAt: payload.lastSyncAttemptAt,
+    lastSyncedAt: payload.lastSyncedAt,
+    lastError: payload.lastError,
+    isOnline: payload.isOnline,
+  });
+}
+
+export async function reportPosDeviceSyncStatus({
+  token,
+  context = {},
+  force = false,
+} = {}) {
+  if (!token) {
+    return null;
+  }
+
+  const queue = await loadPendingPosSales();
+  const activity = await loadPosSyncActivity();
+  const queueIds = new Set(queue.map((entry) => `${entry?.id || ""}`));
+  const queuedActivity = activity.filter((entry) =>
+    queueIds.has(`${entry?.id || ""}`),
+  );
+  const failedCount = queue.filter(
+    (entry) => {
+      const status = `${entry?.status || ""}`.trim().toLowerCase();
+      return (
+        status !== "needs_review" &&
+        (status === "failed" || `${entry?.lastError || ""}`.trim())
+      );
+    },
+  ).length;
+  const needsReviewCount = queue.filter(
+    (entry) => `${entry?.status || ""}`.trim().toLowerCase() === "needs_review",
+  ).length;
+  const firstPayload = queue.find((entry) => entry?.payload)?.payload || {};
+  const payload = {
+    deviceId: await getPosDeviceId(),
+    platform: "mobile",
+    appVersion: "pos-mobile",
+    stationId: `${context.stationId || firstPayload?.stationId || ""}`.trim(),
+    stationName: `${context.stationName || firstPayload?.stationName || ""}`.trim(),
+    cashierName: `${context.cashierName || firstPayload?.cashierName || ""}`.trim(),
+    pendingCount: queue.length,
+    failedCount,
+    needsReviewCount,
+    oldestUnsyncedAt: getOldestDateValue(queue, ["queuedAt", "saleDate"]),
+    lastSyncAttemptAt: getLatestDateValue(queuedActivity, ["lastAttemptAt"]),
+    lastSyncedAt: await getLastSyncedAt(),
+    lastError: getLatestErrorValue(queuedActivity, queue),
+    isOnline: lastKnownOnline,
+    reportedAt: new Date().toISOString(),
+  };
+  const signature = buildDeviceStatusSignature(payload);
+  const now = Date.now();
+
+  if (
+    !force &&
+    signature === lastDeviceStatusReportSignature &&
+    now - lastDeviceStatusReportAt < POS_DEVICE_STATUS_HEARTBEAT_MS
+  ) {
+    return {
+      success: true,
+      skipped: true,
+    };
+  }
+
+  try {
+    const result = await reportMobilePosDeviceSyncStatus({ token, payload });
+    lastDeviceStatusReportSignature = signature;
+    lastDeviceStatusReportAt = now;
+
+    return result;
+  } catch {
+    return null;
+  }
+}
+
 function calculateQueuedSaleAmount(payload) {
   const payloadTotalAmount = Number(payload?.totalAmount ?? 0);
 
@@ -133,13 +286,14 @@ function calculateQueuedSaleAmount(payload) {
 
 function buildSyncActivityEntry(sourceEntry) {
   const payload = sourceEntry?.payload || {};
+  const sourceStatus = `${sourceEntry?.status || ""}`.trim().toLowerCase();
 
   return {
     id: sourceEntry?.id || createClientSaleId(),
     syncAction: `${payload?.syncAction || "sale_create"}`.trim().toLowerCase(),
     queuedAt: sourceEntry?.queuedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    status: "queued",
+    status: sourceStatus || "queued",
     stationName: `${payload?.stationName || ""}`.trim(),
     cashierName: `${payload?.cashierName || ""}`.trim(),
     amount: calculateQueuedSaleAmount(payload),
@@ -176,6 +330,7 @@ async function upsertSyncActivityEntry(sourceEntry, overrides = {}) {
 function serializeQueuedSale(sourceEntry, activityEntry) {
   const payload = sourceEntry?.payload || {};
   const resolvedStatus = `${activityEntry?.status || ""}`.trim();
+  const sourceStatus = `${sourceEntry?.status || ""}`.trim();
 
   return {
     id: `${sourceEntry?.id || ""}`.trim(),
@@ -187,7 +342,7 @@ function serializeQueuedSale(sourceEntry, activityEntry) {
     stationName: `${payload?.stationName || activityEntry?.stationName || ""}`.trim(),
     cashierName: `${payload?.cashierName || activityEntry?.cashierName || ""}`.trim(),
     amount: calculateQueuedSaleAmount(payload),
-    status: resolvedStatus || "queued",
+    status: sourceStatus || resolvedStatus || "queued",
     lastAttemptAt: `${activityEntry?.lastAttemptAt || ""}`.trim(),
     lastError: `${activityEntry?.lastError || ""}`.trim(),
     lastSyncedAt: `${activityEntry?.lastSyncedAt || ""}`.trim(),
@@ -210,6 +365,7 @@ function buildFailedQueueEntry(entry, attemptTimestamp, lastError) {
 
   return {
     ...entry,
+    status: "failed",
     retryCount,
     nextRetryAt,
     lastAttemptAt: attemptTimestamp,
@@ -218,7 +374,15 @@ function buildFailedQueueEntry(entry, attemptTimestamp, lastError) {
 }
 
 function canRetryEntry(entry, { force = false, prioritizeSaleId = "" } = {}) {
-  if (force || `${entry?.id || ""}` === `${prioritizeSaleId || ""}`) {
+  const isNeedsReview =
+    `${entry?.status || ""}`.trim().toLowerCase() === "needs_review";
+  const isPrioritized = `${entry?.id || ""}` === `${prioritizeSaleId || ""}`;
+
+  if (isNeedsReview && !force && !isPrioritized) {
+    return false;
+  }
+
+  if (force || isPrioritized) {
     return true;
   }
 
@@ -243,6 +407,7 @@ export async function queuePendingPosSale(payload) {
   const queuedSale = {
     id: clientSaleId,
     queuedAt: new Date().toISOString(),
+    status: "queued",
     lastAttemptAt: "",
     lastError: "",
     retryCount: 0,
@@ -274,23 +439,41 @@ export async function queuePendingPosReversal(payload) {
   });
 }
 
-export async function removePendingPosSale(saleId) {
+export async function markPendingPosSaleNeedsReview(saleId) {
   const normalizedSaleId = `${saleId || ""}`.trim();
 
   if (!normalizedSaleId) {
     return;
   }
 
-  const nextQueue = (await loadPendingPosSales()).filter(
-    (entry) => `${entry?.id || ""}` !== normalizedSaleId,
+  const queue = await loadPendingPosSales();
+  const nextQueue = queue.map((entry) => {
+    if (`${entry?.id || ""}` !== normalizedSaleId) {
+      return entry;
+    }
+
+    return {
+      ...entry,
+      status: "needs_review",
+      lastError:
+        `${entry?.lastError || ""}`.trim() ||
+        "This queued POS record was flagged for admin review.",
+    };
+  });
+  const flaggedEntry = nextQueue.find(
+    (entry) => `${entry?.id || ""}` === normalizedSaleId,
   );
 
   await savePendingPosSales(nextQueue);
-  await savePosSyncActivity(
-    (await loadPosSyncActivity()).filter(
-      (entry) => `${entry?.id || ""}` !== normalizedSaleId,
-    ),
-  );
+
+  if (flaggedEntry) {
+    await upsertSyncActivityEntry(flaggedEntry, {
+      status: "needs_review",
+      lastError:
+        `${flaggedEntry?.lastError || ""}`.trim() ||
+        "This queued POS record was flagged for admin review.",
+    });
+  }
 }
 
 export async function clearResolvedPosSyncEntries() {
@@ -363,10 +546,21 @@ export async function syncPendingPosSales({
     throw new Error("Missing session token.");
   }
 
+  const currentQueue = await loadPendingPosSales();
+
+  if (currentQueue.length === 0) {
+    return {
+      syncedCount: 0,
+      pendingCount: 0,
+      results: {},
+      lastSyncedAt: await getLastSyncedAt(),
+    };
+  }
+
   if (isSyncing) {
     return {
       syncedCount: 0,
-      pendingCount: (await loadPendingPosSales()).length,
+      pendingCount: currentQueue.length,
       results: {},
       lastSyncedAt: await getLastSyncedAt(),
     };
@@ -376,7 +570,7 @@ export async function syncPendingPosSales({
   emitStatus();
 
   try {
-    const initialQueue = await loadPendingPosSales();
+    const initialQueue = currentQueue;
     const prioritizedQueue = [
       ...initialQueue.filter((entry) => `${entry?.id || ""}` === `${prioritizeSaleId || ""}`),
       ...initialQueue.filter((entry) => `${entry?.id || ""}` !== `${prioritizeSaleId || ""}`),
@@ -485,6 +679,7 @@ export async function syncPendingPosSales({
   } finally {
     isSyncing = false;
     emitStatus();
+    void reportPosDeviceSyncStatus({ token });
   }
 }
 

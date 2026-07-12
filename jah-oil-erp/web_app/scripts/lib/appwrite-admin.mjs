@@ -3,6 +3,9 @@ import path from "node:path";
 import process from "node:process";
 
 const ENV_FILES = [".env.local", ".env"];
+const DEFAULT_REQUEST_RETRY_ATTEMPTS = 4;
+const DEFAULT_REQUEST_RETRY_DELAY_MS = 750;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 
 export function loadEnvFiles() {
   for (const envFile of ENV_FILES) {
@@ -86,6 +89,19 @@ export function createAdminConfig(cliArgs = {}) {
     process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;
   const apiKey = cliArgs.apiKey || process.env.APPWRITE_API_KEY;
   const databaseId = cliArgs.databaseId || process.env.APPWRITE_DATABASE_ID;
+  const requestRetryAttempts = getPositiveInteger(
+    cliArgs.requestRetries || process.env.APPWRITE_ADMIN_REQUEST_RETRIES,
+    DEFAULT_REQUEST_RETRY_ATTEMPTS,
+  );
+  const requestRetryDelayMs = getPositiveInteger(
+    cliArgs.requestRetryDelayMs ||
+      process.env.APPWRITE_ADMIN_REQUEST_RETRY_DELAY_MS,
+    DEFAULT_REQUEST_RETRY_DELAY_MS,
+  );
+  const requestTimeoutMs = getPositiveInteger(
+    cliArgs.requestTimeoutMs || process.env.APPWRITE_ADMIN_REQUEST_TIMEOUT_MS,
+    DEFAULT_REQUEST_TIMEOUT_MS,
+  );
 
   return {
     endpoint,
@@ -94,6 +110,9 @@ export function createAdminConfig(cliArgs = {}) {
     databaseId,
     dryRun: Boolean(cliArgs["dry-run"]),
     apiBaseUrl: buildApiBaseUrl(endpoint),
+    requestRetryAttempts,
+    requestRetryDelayMs,
+    requestTimeoutMs,
   };
 }
 
@@ -122,27 +141,63 @@ export function validateAdminConfig(config, options = {}) {
 }
 
 export async function request(config, resourcePath, options = {}) {
-  const response = await fetch(`${config.apiBaseUrl}${resourcePath}`, {
-    method: options.method || "GET",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Appwrite-Project": config.projectId,
-      "X-Appwrite-Key": config.apiKey,
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  const attempts = Math.max(
+    1,
+    Number(options.retryAttempts || config.requestRetryAttempts || 1),
+  );
+  let lastError = null;
 
-  const rawText = await response.text();
-  const payload = rawText ? safeJsonParse(rawText) : {};
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, config.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS);
 
-  if (!response.ok) {
-    const error = new Error(payload?.message || `Request failed with status ${response.status}`);
-    error.status = response.status;
-    error.details = payload;
-    throw error;
+      const response = await fetch(`${config.apiBaseUrl}${resourcePath}`, {
+        method: options.method || "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Appwrite-Project": config.projectId,
+          "X-Appwrite-Key": config.apiKey,
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+
+      const rawText = await response.text();
+      const payload = rawText ? safeJsonParse(rawText) : {};
+
+      if (!response.ok) {
+        const error = new Error(payload?.message || `Request failed with status ${response.status}`);
+        error.status = response.status;
+        error.details = payload;
+
+        if (attempt < attempts && isRetryableError(error)) {
+          await waitForRetry(config, attempt);
+          continue;
+        }
+
+        throw error;
+      }
+
+      return payload;
+    } catch (error) {
+      lastError = normalizeRequestError(error);
+
+      if (attempt < attempts && isRetryableError(lastError)) {
+        console.warn(
+          `Appwrite request failed on attempt ${attempt}/${attempts}: ${lastError.message}. Retrying...`,
+        );
+        await waitForRetry(config, attempt);
+        continue;
+      }
+
+      throw lastError;
+    }
   }
 
-  return payload;
+  throw lastError || new Error("Appwrite request failed.");
 }
 
 export async function createDocument(config, collectionId, documentId, data, permissions = []) {
@@ -183,4 +238,54 @@ function safeJsonParse(value) {
   } catch {
     return { message: value };
   }
+}
+
+function getPositiveInteger(value, fallbackValue) {
+  const number = Number(value);
+
+  return Number.isInteger(number) && number > 0 ? number : fallbackValue;
+}
+
+function normalizeRequestError(error) {
+  if (error?.name === "AbortError") {
+    const timeoutError = new Error("Appwrite request timed out.");
+    timeoutError.cause = error;
+    return timeoutError;
+  }
+
+  return error;
+}
+
+function isRetryableError(error) {
+  const status = Number(error?.status || 0);
+
+  if (status === 408 || status === 425 || status === 429) {
+    return true;
+  }
+
+  if (status >= 500 && status <= 599) {
+    return true;
+  }
+
+  const message = `${error?.message || ""}`.toLowerCase();
+  const causeCode = `${error?.cause?.code || ""}`.toLowerCase();
+
+  return (
+    message.includes("fetch failed") ||
+    message.includes("timed out") ||
+    message.includes("network") ||
+    message.includes("terminated") ||
+    causeCode.includes("timeout") ||
+    causeCode.includes("econnreset") ||
+    causeCode.includes("enotfound")
+  );
+}
+
+function waitForRetry(config, attempt) {
+  const baseDelay = Number(config.requestRetryDelayMs || DEFAULT_REQUEST_RETRY_DELAY_MS);
+  const delay = Math.min(baseDelay * 2 ** Math.max(0, attempt - 1), 8000);
+
+  return new Promise((resolve) => {
+    setTimeout(resolve, delay);
+  });
 }

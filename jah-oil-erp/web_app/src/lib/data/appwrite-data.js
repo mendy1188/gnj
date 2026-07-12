@@ -34,6 +34,7 @@ const COLLECTIONS = {
   customerBalances: "customer_balances",
   customerBalanceMovements: "customer_balance_movements",
   posTransactionEnvelopes: "pos_transaction_envelopes",
+  posDeviceSyncStatus: "pos_device_sync_status",
 };
 
 const DEFAULT_PAGE_LIMIT = getPositiveInteger(
@@ -73,7 +74,7 @@ const COLLECTION_QUERY_SETTINGS = {
   [COLLECTIONS.salesReceiptItems]: {
     pageLimit: getPositiveInteger(
       process.env.APPWRITE_SALES_ITEMS_PAGE_LIMIT,
-      5000,
+      500,
     ),
     timeoutMs: getPositiveInteger(
       process.env.APPWRITE_SALES_ITEMS_TIMEOUT_MS,
@@ -94,7 +95,7 @@ const COLLECTION_QUERY_SETTINGS = {
   [COLLECTIONS.salesReceipts]: {
     pageLimit: getPositiveInteger(
       process.env.APPWRITE_SALES_RECEIPTS_PAGE_LIMIT,
-      5000,
+      500,
     ),
     timeoutMs: getPositiveInteger(
       process.env.APPWRITE_SALES_RECEIPTS_TIMEOUT_MS,
@@ -198,7 +199,7 @@ const COLLECTION_QUERY_SETTINGS = {
   [COLLECTIONS.stationProductDailySummary]: {
     pageLimit: getPositiveInteger(
       process.env.APPWRITE_STATION_PRODUCT_SUMMARY_PAGE_LIMIT,
-      5000,
+      1000,
     ),
     timeoutMs: getPositiveInteger(
       process.env.APPWRITE_STATION_PRODUCT_SUMMARY_TIMEOUT_MS,
@@ -223,7 +224,7 @@ const COLLECTION_QUERY_SETTINGS = {
   [COLLECTIONS.stationCategoryDailySummary]: {
     pageLimit: getPositiveInteger(
       process.env.APPWRITE_STATION_CATEGORY_SUMMARY_PAGE_LIMIT,
-      5000,
+      1000,
     ),
     timeoutMs: getPositiveInteger(
       process.env.APPWRITE_STATION_CATEGORY_SUMMARY_TIMEOUT_MS,
@@ -270,7 +271,7 @@ const COLLECTION_QUERY_SETTINGS = {
   [COLLECTIONS.couponPurchases]: {
     pageLimit: getPositiveInteger(
       process.env.APPWRITE_COUPON_PURCHASES_PAGE_LIMIT,
-      5000,
+      1000,
     ),
     timeoutMs: getPositiveInteger(
       process.env.APPWRITE_COUPON_PURCHASES_TIMEOUT_MS,
@@ -407,7 +408,7 @@ const COLLECTION_QUERY_SETTINGS = {
   [COLLECTIONS.customerBalanceMovements]: {
     pageLimit: getPositiveInteger(
       process.env.APPWRITE_CUSTOMER_BALANCE_MOVEMENTS_PAGE_LIMIT,
-      5000,
+      1000,
     ),
     timeoutMs: getPositiveInteger(
       process.env.APPWRITE_CUSTOMER_BALANCE_MOVEMENTS_TIMEOUT_MS,
@@ -459,6 +460,37 @@ const COLLECTION_QUERY_SETTINGS = {
       "payload_summary",
       "error_message",
       "created_at",
+      "updated_at",
+    ],
+  },
+  [COLLECTIONS.posDeviceSyncStatus]: {
+    pageLimit: getPositiveInteger(
+      process.env.APPWRITE_POS_DEVICE_SYNC_STATUS_PAGE_LIMIT,
+      500,
+    ),
+    timeoutMs: getPositiveInteger(
+      process.env.APPWRITE_POS_DEVICE_SYNC_STATUS_TIMEOUT_MS,
+      DEFAULT_COLLECTION_TIMEOUT_MS,
+    ),
+    select: [
+      "$id",
+      "device_id",
+      "platform",
+      "app_version",
+      "station_id",
+      "station_name",
+      "cashier_user_id",
+      "cashier_name",
+      "status",
+      "pending_count",
+      "failed_count",
+      "needs_review_count",
+      "oldest_unsynced_at",
+      "last_sync_attempt_at",
+      "last_synced_at",
+      "last_error",
+      "is_online",
+      "reported_at",
       "updated_at",
     ],
   },
@@ -1384,6 +1416,52 @@ export async function getPosTransactionEnvelopesData(options = {}) {
     );
 }
 
+export async function getPosDeviceSyncStatusData() {
+  const documents = await queryCollectionDocuments(
+    COLLECTIONS.posDeviceSyncStatus,
+    {
+      pageLimit:
+        COLLECTION_QUERY_SETTINGS[COLLECTIONS.posDeviceSyncStatus]?.pageLimit,
+      timeoutMs:
+        COLLECTION_QUERY_SETTINGS[COLLECTIONS.posDeviceSyncStatus]?.timeoutMs,
+      select: COLLECTION_QUERY_SETTINGS[COLLECTIONS.posDeviceSyncStatus]?.select,
+      filterQueries: [Query.orderDesc("updated_at")],
+      retryAttempts: DEFAULT_COLLECTION_RETRY_ATTEMPTS,
+      requestLabel: "pos-device-sync-status",
+    },
+  );
+
+  return documents
+    .map((document) => ({
+      id: document.$id,
+      deviceId: document.device_id || "",
+      platform: document.platform || "unknown",
+      appVersion: document.app_version || "",
+      stationId: document.station_id || "",
+      stationName: document.station_name || "",
+      cashierUserId: document.cashier_user_id || "",
+      cashierName: document.cashier_name || "",
+      status: document.status || "",
+      pendingCount: Number(document.pending_count || 0),
+      failedCount: Number(document.failed_count || 0),
+      needsReviewCount: Number(document.needs_review_count || 0),
+      oldestUnsyncedAt: document.oldest_unsynced_at || "",
+      lastSyncAttemptAt: document.last_sync_attempt_at || "",
+      lastSyncedAt: document.last_synced_at || "",
+      lastError: document.last_error || "",
+      isOnline: Boolean(document.is_online),
+      reportedAt: document.reported_at || "",
+      updatedAt: document.updated_at || "",
+    }))
+    .sort(
+      (left, right) =>
+        `${right.updatedAt || right.reportedAt || ""}`.localeCompare(
+          `${left.updatedAt || left.reportedAt || ""}`,
+        ) ||
+        `${left.stationName || ""}`.localeCompare(`${right.stationName || ""}`),
+    );
+}
+
 export async function getClientRecentSalesActivities(options = {}) {
   const {
     customerPhone = "",
@@ -1845,30 +1923,31 @@ export function buildDashboardDataFromRecords(salesData, inventoryData) {
   const salesByStation = buildSalesByStation(salesData);
   const salesByDay = buildSalesByDay(salesData);
   const latestSalesDate = getLatestDate(salesData);
-  const latestSalesRecords = salesData.filter(
-    (record) => record.date === latestSalesDate,
+  const todayDate = getTodayDateString();
+  const todaySalesRecords = salesData.filter(
+    (record) => record.date === todayDate,
   );
   const fuelPetrolSales = sumAmountByTypeAndItem(
-    latestSalesRecords,
+    todaySalesRecords,
     "Fuel",
     "petrol",
   );
   const fuelDieselSales = sumAmountByTypeAndItem(
-    latestSalesRecords,
+    todaySalesRecords,
     "Fuel",
     "diesel",
   );
-  const riceSales = sumAmountByTypeAndItem(latestSalesRecords, "Shop", "rice");
+  const riceSales = sumAmountByTypeAndItem(todaySalesRecords, "Shop", "rice");
   const cookingSales = sumAmountByTypeAndItem(
-    latestSalesRecords,
+    todaySalesRecords,
     "Shop",
     "cooking oil",
   );
-  const totalShopBreakdownSales = latestSalesRecords
+  const totalShopBreakdownSales = todaySalesRecords
     .filter((record) => record.type === "Shop")
     .reduce((sum, record) => sum + record.amount, 0);
   const otherShopSales = totalShopBreakdownSales - riceSales - cookingSales;
-  const cementBagsSold = latestSalesRecords
+  const cementBagsSold = todaySalesRecords
     .filter((record) => record.type === "Cement")
     .reduce((sum, record) => sum + record.quantity, 0);
   const lowStockAlerts = buildLowStockAlerts(inventoryData);
@@ -1881,18 +1960,18 @@ export function buildDashboardDataFromRecords(salesData, inventoryData) {
     cement: station.cement,
   }));
   const totalTodaySales =
-    sumAmountByType(latestSalesRecords, "Fuel") +
-    sumAmountByType(latestSalesRecords, "Shop") +
-    sumAmountByType(latestSalesRecords, "Cement");
+    sumAmountByType(todaySalesRecords, "Fuel") +
+    sumAmountByType(todaySalesRecords, "Shop") +
+    sumAmountByType(todaySalesRecords, "Cement");
 
   return {
     salesByStation,
     salesByDay,
     lowStockAlerts,
     todaySales: {
-      fuel: sumAmountByType(latestSalesRecords, "Fuel"),
-      shop: sumAmountByType(latestSalesRecords, "Shop"),
-      cement: sumAmountByType(latestSalesRecords, "Cement"),
+      fuel: sumAmountByType(todaySalesRecords, "Fuel"),
+      shop: sumAmountByType(todaySalesRecords, "Shop"),
+      cement: sumAmountByType(todaySalesRecords, "Cement"),
     },
     topStations,
     latestSalesDate,
@@ -1905,7 +1984,7 @@ export function buildDashboardDataFromRecords(salesData, inventoryData) {
     totalTodaySales,
     bestStation: topStations[0] || null,
     alertCount: lowStockAlerts.length,
-    todayTransactionCount: latestSalesRecords.length,
+    todayTransactionCount: todaySalesRecords.length,
   };
 }
 
@@ -1916,8 +1995,9 @@ export function buildDashboardDataFromSummaryRecords(
   const salesByStation = buildSalesByStationFromSummary(summaryRecords);
   const salesByDay = buildSalesByDayFromSummary(summaryRecords);
   const latestSalesDate = getLatestDate(summaryRecords);
-  const latestSummaryRecords = summaryRecords.filter(
-    (record) => record.date === latestSalesDate,
+  const todayDate = getTodayDateString();
+  const todaySummaryRecords = summaryRecords.filter(
+    (record) => record.date === todayDate,
   );
   const lowStockAlerts = buildLowStockAlerts(inventoryData);
   const topStations = salesByStation.map((station, index) => ({
@@ -1928,47 +2008,47 @@ export function buildDashboardDataFromSummaryRecords(
     shop: station.shop,
     cement: station.cement,
   }));
-  const todayFuelSales = latestSummaryRecords.reduce(
+  const todayFuelSales = todaySummaryRecords.reduce(
     (total, record) => total + record.fuelSales,
     0,
   );
-  const todayShopSales = latestSummaryRecords.reduce(
+  const todayShopSales = todaySummaryRecords.reduce(
     (total, record) => total + record.shopSales,
     0,
   );
-  const todayCementSales = latestSummaryRecords.reduce(
+  const todayCementSales = todaySummaryRecords.reduce(
     (total, record) => total + record.cementSales,
     0,
   );
-  const fuelPetrolSales = latestSummaryRecords.reduce(
+  const fuelPetrolSales = todaySummaryRecords.reduce(
     (total, record) => total + record.petrolSales,
     0,
   );
-  const fuelDieselSales = latestSummaryRecords.reduce(
+  const fuelDieselSales = todaySummaryRecords.reduce(
     (total, record) => total + record.dieselSales,
     0,
   );
-  const riceSales = latestSummaryRecords.reduce(
+  const riceSales = todaySummaryRecords.reduce(
     (total, record) => total + record.riceSales,
     0,
   );
-  const cookingSales = latestSummaryRecords.reduce(
+  const cookingSales = todaySummaryRecords.reduce(
     (total, record) => total + record.cookingOilSales,
     0,
   );
-  const otherShopSales = latestSummaryRecords.reduce(
+  const otherShopSales = todaySummaryRecords.reduce(
     (total, record) => total + record.otherShopSales,
     0,
   );
-  const cementBagsSold = latestSummaryRecords.reduce(
+  const cementBagsSold = todaySummaryRecords.reduce(
     (total, record) => total + record.cementBagsSold,
     0,
   );
-  const totalTodaySales = latestSummaryRecords.reduce(
+  const totalTodaySales = todaySummaryRecords.reduce(
     (total, record) => total + record.totalSales,
     0,
   );
-  const todayTransactionCount = latestSummaryRecords.reduce(
+  const todayTransactionCount = todaySummaryRecords.reduce(
     (total, record) => total + record.transactions,
     0,
   );
@@ -3189,7 +3269,16 @@ function getCachedResource(
   const activeRequest = collectionInFlightRequests.get(resourceKey);
 
   if (activeRequest) {
-    return staleCachedData ? Promise.resolve(staleCachedData) : activeRequest;
+    return activeRequest.catch((error) => {
+      if (staleCachedData) {
+        console.warn(
+          `Appwrite resource "${errorLabel}" failed to refresh. Using stale cached data instead.`,
+        );
+        return staleCachedData;
+      }
+
+      throw error;
+    });
   }
 
   const requestPromise = (async () => {
@@ -3215,7 +3304,7 @@ function getCachedResource(
 
   collectionInFlightRequests.set(resourceKey, requestPromise);
 
-  return staleCachedData ? Promise.resolve(staleCachedData) : requestPromise;
+  return requestPromise;
 }
 
 function getPositiveInteger(value, fallbackValue) {
@@ -3313,6 +3402,10 @@ export function invalidateAppwriteCollectionCache(collectionIds = []) {
 
   if (collectionIds.includes(COLLECTIONS.stationProductDailySummary)) {
     cachePrefixesToClear.add("station-product-summary-data:");
+  }
+
+  if (collectionIds.includes(COLLECTIONS.stationCategoryDailySummary)) {
+    cachePrefixesToClear.add("station-category-summary-data:");
   }
 
   collectionIds.forEach((collectionId) => {

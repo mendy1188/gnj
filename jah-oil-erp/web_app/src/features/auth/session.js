@@ -13,7 +13,7 @@ const ROLE_NAMES = {
 
 const MODULE_DEFINITIONS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: "📊" },
-  { key: "coupons", label: "Coupons", href: "/coupons", icon: "🎟️" },
+  // { key: "coupons", label: "Coupons", href: "/coupons", icon: "🎟️" },
   {
     key: "bulk-fuel-purchases",
     label: "Bulk Fuel Purchases",
@@ -46,18 +46,18 @@ const MODULE_DEFINITIONS = [
     href: "/rewards-management",
     icon: "🎁",
   },
-  {
-    key: "coupon-purchases",
-    label: "Purchase Coupons",
-    href: "/coupon-purchases",
-    icon: "🧾",
-  },
-  {
-    key: "bulk-fuel-purchase-settings",
-    label: "Bulk Fuel Purchase Settings",
-    href: "/bulk-fuel-purchase-settings",
-    icon: "⛽",
-  },
+  // {
+  //   key: "coupon-purchases",
+  //   label: "Purchase Coupons",
+  //   href: "/coupon-purchases",
+  //   icon: "🧾",
+  // },
+  // {
+  //   key: "bulk-fuel-purchase-settings",
+  //   label: "Bulk Fuel Purchase Settings",
+  //   href: "/bulk-fuel-purchase-settings",
+  //   icon: "⛽",
+  // },
   {
     key: "balance-management",
     label: "Credit Settlements",
@@ -93,6 +93,12 @@ const MODULE_DEFINITIONS = [
   { key: "pos", label: "POS", href: "/pos", icon: "🛒" },
   { key: "reports", label: "Reports", href: "/reports", icon: "📈" },
   { key: "admin", label: "Users / Roles", href: "/admin", icon: "🛡️" },
+  {
+    key: "pos-envelopes",
+    label: "POS Repairs",
+    href: "/admin/pos-repairs",
+    icon: "document",
+  },
 ];
 
 const NAVIGATION_DEFINITIONS = [
@@ -100,7 +106,6 @@ const NAVIGATION_DEFINITIONS = [
   { type: "module", key: "stations" },
   { type: "module", key: "inventory" },
   { type: "module", key: "cement" },
-  { type: "module", key: "incoming-stock" },
   { type: "module", key: "fuel-deliveries" },
   { type: "module", key: "fuel-sales" },
   { type: "module", key: "commodities-sales" },
@@ -116,12 +121,14 @@ const NAVIGATION_DEFINITIONS = [
     children: [
       "product-settings",
       "station-settings",
+      "incoming-stock",
       "payment-methods",
       "rewards-management",
       "coupon-purchases",
       "bulk-fuel-purchase-settings",
       "balance-management",
       "reverse-transactions",
+      "pos-envelopes",
       "admin",
     ],
   },
@@ -144,7 +151,12 @@ const DEFAULT_ROLE_DEFINITIONS = [
     branchRequired: false,
     modules: MODULE_DEFINITIONS.filter(
       (module) =>
-        !["admin", "payment-methods", "balance-management"].includes(module.key),
+        ![
+          "admin",
+          "pos-envelopes",
+          "payment-methods",
+          "balance-management",
+        ].includes(module.key),
     ).map((module) => module.key),
   },
   {
@@ -285,7 +297,12 @@ function buildNavigationItems(allowedModuleKeys = []) {
     if (entry.type === "group") {
       const children = entry.children
         .map((key) => moduleMap.get(key))
-        .filter((module) => module && allowedModules.has(module.key))
+        .filter(
+          (module) =>
+            module &&
+            (allowedModules.has(module.key) ||
+              (module.key === "pos-envelopes" && allowedModules.has("admin"))),
+        )
         .map(toNavigationItem);
 
       return children.length > 0

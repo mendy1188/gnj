@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import DataTable from "@/components/dashboard/DataTable";
+import ToastMessage from "@/components/ui/ToastMessage";
 import DashboardPageShell from "@/features/dashboard/page-shell";
 import {
   formatDisplayDateTime,
@@ -354,17 +355,17 @@ export default function IncomingStockPageClient({
               </div>
             </div>
 
-            {submissionState?.message ? (
-              <div
-                className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
-                  submissionState.success
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-rose-200 bg-rose-50 text-rose-700"
-                }`}
-              >
-                {submissionState.message}
-              </div>
-            ) : null}
+            <ToastMessage
+              message={submissionState?.message || ""}
+              tone={
+                submissionState?.success
+                  ? "success"
+                  : submissionState
+                    ? "error"
+                    : "info"
+              }
+              onClose={() => setSubmissionState(null)}
+            />
           </div>
 
           <PaginationSummary

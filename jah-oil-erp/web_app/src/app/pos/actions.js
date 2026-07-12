@@ -7,6 +7,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 
 import { getCurrentSession } from "@/features/auth/server";
 import { getUserFacingErrorMessage } from "@/features/errors/copy";
+import { roundCurrency, sumCurrency } from "@/features/money/minor-units";
 import {
   filterProductsForSession,
   filterStationsForPosSession,
@@ -390,11 +391,7 @@ export async function completePosSaleAction(payload, options = {}) {
       };
     }
 
-    const subtotal = Number(
-      resolvedItems
-        .reduce((sum, item) => sum + Number(item.lineTotal || 0), 0)
-        .toFixed(2),
-    );
+    const subtotal = sumCurrency(resolvedItems.map((item) => item.lineTotal));
     const totalAmount = subtotal;
     const receiptNumber = buildReceiptNumber({ saleDate, clientSaleId });
     const transactionEnvelope = await createPosTransactionEnvelopeRecord(
@@ -540,7 +537,7 @@ export async function completePosSaleAction(payload, options = {}) {
             quantity: Number(item.quantity),
             unit: item.unit,
             unit_price: Number(item.unitPrice),
-            line_total: Number(item.lineTotal || 0),
+            line_total: roundCurrency(item.lineTotal),
           },
         ),
       ),
@@ -3378,10 +3375,10 @@ function resolveSaleLineTotal(item) {
   if (category === "fuel") {
     const amount = Number(item?.amount || 0);
 
-    return Number.isFinite(amount) && amount > 0 ? Number(amount.toFixed(2)) : 0;
+    return Number.isFinite(amount) && amount > 0 ? roundCurrency(amount) : 0;
   }
 
-  return Number((Number(item?.unitPrice || 0) * Number(item?.quantity || 0)).toFixed(2));
+  return roundCurrency(Number(item?.unitPrice || 0) * Number(item?.quantity || 0));
 }
 
 async function createSalesReceiptDocument(databases, receiptId, payload) {

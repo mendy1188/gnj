@@ -14,7 +14,7 @@ import {
 import { loadMockData } from "./lib/mock-data.mjs";
 
 const DEFAULT_ADMIN_EMAIL = "admin@jahoil.com";
-const DEFAULT_ADMIN_PASSWORD = "password";
+const DEFAULT_ADMIN_PASSWORD = "admin@jahoil123";
 const ROLE_DEFINITIONS = [
   {
     documentId: "role_admin",

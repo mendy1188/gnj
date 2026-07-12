@@ -1,8 +1,8 @@
 import "./app.css";
 
 export const metadata = {
-  title: "Appwrite + Next.js",
-  description: "Appwrite starter for Next.js",
+  title: "JAH MULTI INDUSTRIES",
+  description: "ERP Management System",
 };
 
 export default function RootLayout({ children }) {

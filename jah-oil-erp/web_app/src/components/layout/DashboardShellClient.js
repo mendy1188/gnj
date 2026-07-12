@@ -1,10 +1,46 @@
 "use client";
 
-import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 import { AppIcon } from "@/components/ui/AppIcon";
 import Sidebar from "./Sidebar";
+
+const CLIENT_REFRESH_STORAGE_PREFIX = "jah-erp-route-refresh:";
+const CLIENT_REFRESH_MIN_INTERVAL_MS = 20_000;
+
+function shouldRefreshRoute(pathname = "") {
+  return Boolean(pathname) && pathname !== "/pos" && !pathname.startsWith("/login");
+}
+
+function readLastRouteRefreshAt(pathname) {
+  if (typeof window === "undefined") {
+    return 0;
+  }
+
+  try {
+    return Number.parseInt(
+      window.sessionStorage.getItem(`${CLIENT_REFRESH_STORAGE_PREFIX}${pathname}`) ||
+        "0",
+      10,
+    );
+  } catch {
+    return 0;
+  }
+}
+
+function writeLastRouteRefreshAt(pathname, timestamp) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(
+      `${CLIENT_REFRESH_STORAGE_PREFIX}${pathname}`,
+      `${timestamp}`,
+    );
+  } catch {}
+}
 
 export default function DashboardShellClient({
   children,
@@ -16,9 +52,41 @@ export default function DashboardShellClient({
   session,
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const isPosPage = pathname === "/pos";
+
+  useEffect(() => {
+    if (!shouldRefreshRoute(pathname)) {
+      return undefined;
+    }
+
+    function refreshIfStale() {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      const now = Date.now();
+      const lastRefreshAt = readLastRouteRefreshAt(pathname);
+
+      if (now - lastRefreshAt < CLIENT_REFRESH_MIN_INTERVAL_MS) {
+        return;
+      }
+
+      writeLastRouteRefreshAt(pathname, now);
+      router.refresh();
+    }
+
+    refreshIfStale();
+    window.addEventListener("focus", refreshIfStale);
+    document.addEventListener("visibilitychange", refreshIfStale);
+
+    return () => {
+      window.removeEventListener("focus", refreshIfStale);
+      document.removeEventListener("visibilitychange", refreshIfStale);
+    };
+  }, [pathname, router]);
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">

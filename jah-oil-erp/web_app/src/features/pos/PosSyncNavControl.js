@@ -7,7 +7,7 @@ import {
   clearResolvedPosSyncEntries,
   formatLastSyncedAt as formatPosSyncTime,
   getPosSyncPanelSnapshot,
-  removePendingPosSale,
+  markPendingPosSaleNeedsReview,
   subscribeToPosSyncStatus,
   syncPendingPosSales,
 } from "@/features/pos/offline-sync";
@@ -52,6 +52,10 @@ function getQueuedSaleStatusLabel(entry) {
     return "Failed";
   }
 
+  if (status === "needs_review") {
+    return "Needs review";
+  }
+
   if (status === "synced") {
     return "Synced";
   }
@@ -68,6 +72,10 @@ function getQueuedSaleStatusClassName(entry) {
 
   if (status === "failed") {
     return "bg-rose-100 text-rose-700";
+  }
+
+  if (status === "needs_review") {
+    return "bg-violet-100 text-violet-700";
   }
 
   if (status === "synced") {
@@ -175,6 +183,11 @@ export default function PosSyncNavControl() {
     } finally {
       setIsRetrying(false);
     }
+  }
+
+  function handleFlagForReview(saleId) {
+    markPendingPosSaleNeedsReview(saleId);
+    setSnapshot(getPosSyncPanelSnapshot());
   }
 
   return (
@@ -289,73 +302,84 @@ export default function PosSyncNavControl() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {snapshot.queuedSales.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold text-slate-900">
-                              {getQueuedEntryTypeLabel(entry)} ·{" "}
-                              {entry.stationName || "Unknown station"}
-                            </span>
-                            <span
-                              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${getQueuedSaleStatusClassName(
-                                entry,
-                              )}`.trim()}
-                            >
-                              {getQueuedSaleStatusLabel(entry)}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {formatPosSyncTime(entry.queuedAt)} ·{" "}
-                            {entry.cashierName || "Unknown cashier"}
-                          </p>
-                          {entry.receiptNumber ? (
+                  {snapshot.queuedSales.map((entry) => {
+                    const entryStatus = `${entry?.status || ""}`.trim().toLowerCase();
+                    const isFlaggedForReview = entryStatus === "needs_review";
+
+                    return (
+                      <div
+                        key={entry.id}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-semibold text-slate-900">
+                                {getQueuedEntryTypeLabel(entry)} ·{" "}
+                                {entry.stationName || "Unknown station"}
+                              </span>
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${getQueuedSaleStatusClassName(
+                                  entry,
+                                )}`.trim()}
+                              >
+                                {getQueuedSaleStatusLabel(entry)}
+                              </span>
+                            </div>
                             <p className="mt-1 text-xs text-slate-500">
-                              {entry.receiptNumber}
+                              {formatPosSyncTime(entry.queuedAt)} ·{" "}
+                              {entry.cashierName || "Unknown cashier"}
                             </p>
-                          ) : null}
+                            {entry.receiptNumber ? (
+                              <p className="mt-1 text-xs text-slate-500">
+                                {entry.receiptNumber}
+                              </p>
+                            ) : null}
+                          </div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {formatCurrency(entry.totalAmount)}
+                          </p>
                         </div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {formatCurrency(entry.totalAmount)}
-                        </p>
-                      </div>
 
-                      <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-                        <div>
-                          <span className="font-semibold text-slate-700">
-                            Last sync attempt:
-                          </span>{" "}
-                          {formatPosSyncTime(entry.lastAttemptAt)}
+                        <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                          <div>
+                            <span className="font-semibold text-slate-700">
+                              Last sync attempt:
+                            </span>{" "}
+                            {formatPosSyncTime(entry.lastAttemptAt)}
+                          </div>
+                          <div>
+                            <span className="font-semibold text-slate-700">Error:</span>{" "}
+                            {entry.lastError || "None"}
+                          </div>
                         </div>
-                        <div>
-                          <span className="font-semibold text-slate-700">Error:</span>{" "}
-                          {entry.lastError || "None"}
-                        </div>
-                      </div>
 
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleRetrySync(entry.id)}
-                          disabled={isRetrying || snapshot.isSyncing || !snapshot.isOnline}
-                          className="inline-flex cursor-pointer items-center rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          Retry sync
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removePendingPosSale(entry.id)}
-                          className="inline-flex cursor-pointer items-center rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                        >
-                          Remove queued sale
-                        </button>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleRetrySync(entry.id)}
+                            disabled={
+                              isRetrying ||
+                              snapshot.isSyncing ||
+                              !snapshot.isOnline ||
+                              isFlaggedForReview
+                            }
+                            className="inline-flex cursor-pointer items-center rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Retry sync
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleFlagForReview(entry.id)}
+                            disabled={isFlaggedForReview}
+                            className="inline-flex cursor-pointer items-center rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isFlaggedForReview ? "Flagged for review" : "Flag issue"}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

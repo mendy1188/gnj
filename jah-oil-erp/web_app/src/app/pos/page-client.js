@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { OnionIcon, SugarBagIcon } from "@/components/pos/ProductIcons";
 import { AppIcon } from "@/components/ui/AppIcon";
+import ToastMessage from "@/components/ui/ToastMessage";
 import {
   isFuelSales,
   isGeneralSales,
@@ -1291,23 +1292,19 @@ export default function PosPageClient({
         </>
       }
     >
-      {submissionState?.message ? (
-        <div className="pointer-events-none fixed top-24 right-4 z-[70] w-full max-w-sm">
-          <div
-            className={`pointer-events-auto rounded-2xl border px-4 py-3 text-sm shadow-lg ${
-              submissionState.tone === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                : submissionState.tone === "warning"
-                  ? "border-amber-200 bg-amber-50 text-amber-900"
-                  : "border-rose-200 bg-rose-50 text-rose-900"
-            }`}
-            role="status"
-            aria-live="polite"
-          >
-            {submissionState.message}
-          </div>
-        </div>
-      ) : null}
+      <ToastMessage
+        message={submissionState?.message || ""}
+        tone={
+          submissionState?.tone === "success"
+            ? "success"
+            : submissionState?.tone === "warning"
+              ? "warning"
+              : submissionState
+                ? "error"
+                : "info"
+        }
+        onClose={() => setSubmissionState(null)}
+      />
       <div className="grid gap-6 md:grid-cols-10 md:items-start">
         <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_20px_80px_rgba(15,23,42,0.05)] md:col-span-6">
           <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-slate-100 px-6 py-4">

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { loginAction } from "@/features/auth/actions";
 import { DEMO_EMAIL, DEMO_PASSWORD } from "@/features/auth/session";
+import ToastMessage from "@/components/ui/ToastMessage";
 
 export default async function LoginPage({ searchParams }) {
   const params = await searchParams;
@@ -30,15 +31,11 @@ export default async function LoginPage({ searchParams }) {
       <div className="w-full max-w-md">
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 shadow-xl">
           <div className="mb-8 text-center">
-            <h1 className="text-3xl font-bold text-white">Jah Oil</h1>
+            <h1 className="text-3xl font-bold text-white">JAH MULTI INDUSTRIES</h1>
             <p className="mt-2 text-slate-400">ERP Management System</p>
           </div>
 
-          {error ? (
-            <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {error}
-            </div>
-          ) : null}
+          <ToastMessage message={error} tone="error" />
 
           <form action={loginWithRedirect} className="space-y-4">
             <input type="hidden" name="redirectTo" value={redirectTo} />
@@ -53,8 +50,7 @@ export default async function LoginPage({ searchParams }) {
                 type="email"
                 id="email"
                 name="email"
-                defaultValue={DEMO_EMAIL}
-                placeholder="admin@jahoil.com"
+                placeholder="Enter your Jah Oil email address"
                 className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none"
                 required
               />
@@ -71,8 +67,7 @@ export default async function LoginPage({ searchParams }) {
                 type="password"
                 id="password"
                 name="password"
-                defaultValue={DEMO_PASSWORD}
-                placeholder="••••••••"
+                placeholder="Your password"
                 className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none"
                 required
               />
@@ -80,13 +75,13 @@ export default async function LoginPage({ searchParams }) {
 
             <button
               type="submit"
-              className="w-full rounded-lg bg-sky-600 py-2 font-semibold text-white transition-colors hover:bg-sky-700"
+              className="cursor-pointer w-full rounded-lg bg-sky-600 py-2 font-semibold text-white transition-colors hover:bg-sky-700"
             >
               Sign In
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-slate-400">
+          {/* <div className="mt-6 text-center text-sm text-slate-400">
             <p>Default Credentials:</p>
             <p className="mt-1 font-mono text-xs">
               {DEMO_EMAIL} / {DEMO_PASSWORD}
@@ -100,7 +95,7 @@ export default async function LoginPage({ searchParams }) {
             >
               Back to home
             </Link>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>

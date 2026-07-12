@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import DataTable from "@/components/dashboard/DataTable";
 import SalesChart from "@/components/dashboard/SalesChart";
+import ToastMessage from "@/components/ui/ToastMessage";
 import {
   CompactActionButton,
   CompactFieldLabel,
@@ -443,11 +444,11 @@ export default function ReportsPageClient({
             </div>
           </CompactFilterCard>
 
-          {error ? (
-            <div className="rounded-[1.75rem] border border-rose-200 bg-rose-50 px-6 py-5 text-sm text-rose-700">
-              {error}
-            </div>
-          ) : null}
+          <ToastMessage
+            message={error}
+            tone="error"
+            onClose={() => setError("")}
+          />
 
           {previewData?.columns?.length ? (
             <>

@@ -125,4 +125,12 @@ export async function syncMobilePosSale({ token, payload }) {
   });
 }
 
+export async function reportMobilePosDeviceSyncStatus({ token, payload }) {
+  return request("/api/mobile/pos/device-sync-status", {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
 export { ApiError };

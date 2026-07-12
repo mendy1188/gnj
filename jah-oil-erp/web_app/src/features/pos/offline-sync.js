@@ -3,13 +3,17 @@
 const POS_PENDING_SALES_KEY = "jah_oil_pos_pending_sales_v1";
 const POS_LAST_SYNCED_AT_KEY = "jah_oil_pos_last_synced_at_v1";
 const POS_SYNC_ACTIVITY_KEY = "jah_oil_pos_sync_activity_v1";
+const POS_DEVICE_ID_KEY = "jah_oil_pos_device_id_v1";
 const POS_SYNC_STATUS_EVENT = "jah:pos-sync-status";
 const POS_SYNC_RETRY_MESSAGE =
   "Internet is unavailable. Pending sales will sync automatically once the connection is restored.";
 const POS_SYNC_ACTIVITY_LIMIT = 120;
+const POS_DEVICE_STATUS_HEARTBEAT_MS = 5 * 60 * 1000;
 
 let activeSyncPromise = null;
 let syncInProgress = false;
+let lastDeviceStatusReportAt = 0;
+let lastDeviceStatusReportSignature = "";
 
 export function buildQueuedPosSale(payload) {
   const clientSaleId = `${payload?.clientSaleId || createClientSaleId()}`.trim();
@@ -19,6 +23,7 @@ export function buildQueuedPosSale(payload) {
   return {
     id: clientSaleId,
     queuedAt: new Date().toISOString(),
+    status: "queued",
     lastAttemptAt: "",
     lastError: "",
     payload: {
@@ -42,6 +47,7 @@ export function queuePendingPosSale(payload) {
     lastError: "",
     lastSyncedAt: "",
   });
+  void reportPosDeviceSyncStatus();
 
   return queuedSale;
 }
@@ -85,22 +91,43 @@ export function getPosSyncPanelSnapshot() {
   };
 }
 
-export function removePendingPosSale(saleId) {
+export function markPendingPosSaleNeedsReview(saleId) {
   const normalizedSaleId = `${saleId || ""}`.trim();
 
   if (!normalizedSaleId) {
     return;
   }
 
-  const nextQueue = loadPendingPosSales().filter(
-    (entry) => `${entry?.id || ""}` !== normalizedSaleId,
+  const queue = loadPendingPosSales();
+  const nextQueue = queue.map((entry) => {
+    if (`${entry?.id || ""}` !== normalizedSaleId) {
+      return entry;
+    }
+
+    return {
+      ...entry,
+      status: "needs_review",
+      lastError:
+        `${entry?.lastError || ""}`.trim() ||
+        "This queued POS record was flagged for admin review.",
+    };
+  });
+  const flaggedEntry = nextQueue.find(
+    (entry) => `${entry?.id || ""}` === normalizedSaleId,
   );
+
   savePendingPosSales(nextQueue);
-  savePosSyncActivity(
-    loadPosSyncActivity().filter(
-      (entry) => `${entry?.id || ""}` !== normalizedSaleId,
-    ),
-  );
+
+  if (flaggedEntry) {
+    upsertSyncActivityEntry(flaggedEntry, {
+      status: "needs_review",
+      lastError:
+        `${flaggedEntry?.lastError || ""}`.trim() ||
+        "This queued POS record was flagged for admin review.",
+    });
+  }
+
+  void reportPosDeviceSyncStatus();
 }
 
 export function clearResolvedPosSyncEntries() {
@@ -117,6 +144,7 @@ export function clearResolvedPosSyncEntries() {
   });
 
   savePosSyncActivity(nextActivity);
+  void reportPosDeviceSyncStatus();
 }
 
 export function subscribeToPosSyncStatus(listener) {
@@ -172,6 +200,7 @@ export async function syncPendingPosSales({ prioritizeSaleId = "" } = {}) {
     syncInProgress = false;
     activeSyncPromise = null;
     broadcastPosSyncStatus();
+    void reportPosDeviceSyncStatus();
   });
 
   return activeSyncPromise;
@@ -231,6 +260,8 @@ export function formatLastSyncedAt(value) {
 
 async function runPendingPosSalesSync({ prioritizeSaleId = "" } = {}) {
   if (!window.navigator.onLine) {
+    void reportPosDeviceSyncStatus();
+
     return {
       syncedCount: 0,
       pendingCount: loadPendingPosSales().length,
@@ -249,6 +280,12 @@ async function runPendingPosSalesSync({ prioritizeSaleId = "" } = {}) {
   for (let index = 0; index < prioritizedQueue.length; index += 1) {
     const entry = prioritizedQueue[index];
     const attemptTimestamp = new Date().toISOString();
+    const entryStatus = `${entry?.status || ""}`.trim().toLowerCase();
+
+    if (entryStatus === "needs_review") {
+      nextQueue.push(entry);
+      continue;
+    }
 
     upsertSyncActivityEntry(entry, {
       status: "syncing",
@@ -287,6 +324,7 @@ async function runPendingPosSalesSync({ prioritizeSaleId = "" } = {}) {
 
       nextQueue.push({
         ...entry,
+        status: "failed",
         lastAttemptAt: attemptTimestamp,
         lastError: `${result?.message || "Failed to sync sale."}`.trim(),
       });
@@ -315,6 +353,7 @@ async function runPendingPosSalesSync({ prioritizeSaleId = "" } = {}) {
       };
       nextQueue.push({
         ...entry,
+        status: "failed",
         lastAttemptAt: attemptTimestamp,
         lastError: POS_SYNC_RETRY_MESSAGE,
       });
@@ -387,6 +426,101 @@ function saveLastSyncedAt(value) {
   }
 
   broadcastPosSyncStatus();
+}
+
+function buildDeviceStatusSignature(payload) {
+  return JSON.stringify({
+    deviceId: payload.deviceId,
+    platform: payload.platform,
+    stationId: payload.stationId,
+    stationName: payload.stationName,
+    cashierName: payload.cashierName,
+    pendingCount: payload.pendingCount,
+    failedCount: payload.failedCount,
+    needsReviewCount: payload.needsReviewCount,
+    oldestUnsyncedAt: payload.oldestUnsyncedAt,
+    lastSyncAttemptAt: payload.lastSyncAttemptAt,
+    lastSyncedAt: payload.lastSyncedAt,
+    lastError: payload.lastError,
+    isOnline: payload.isOnline,
+  });
+}
+
+export async function reportPosDeviceSyncStatus(extraPayload = {}) {
+  if (!canUseBrowserApis()) {
+    return null;
+  }
+
+  const { force = false, ...payloadExtra } = extraPayload;
+  const queue = loadPendingPosSales();
+  const activity = loadPosSyncActivity();
+  const queueIds = new Set(queue.map((entry) => `${entry?.id || ""}`));
+  const queuedActivity = activity.filter((entry) =>
+    queueIds.has(`${entry?.id || ""}`),
+  );
+  const failedCount = queue.filter(
+    (entry) => {
+      const status = `${entry?.status || ""}`.trim().toLowerCase();
+      return (
+        status !== "needs_review" &&
+        (status === "failed" || `${entry?.lastError || ""}`.trim())
+      );
+    },
+  ).length;
+  const needsReviewCount = queue.filter(
+    (entry) => `${entry?.status || ""}`.trim().toLowerCase() === "needs_review",
+  ).length;
+  const firstPayload = queue.find((entry) => entry?.payload)?.payload || {};
+  const payload = {
+    deviceId: getPosDeviceId(),
+    platform: "web",
+    appVersion: "web-pos",
+    stationId: `${firstPayload?.stationId || ""}`.trim(),
+    stationName: `${firstPayload?.stationName || ""}`.trim(),
+    cashierName: `${firstPayload?.cashierName || ""}`.trim(),
+    pendingCount: queue.length,
+    failedCount,
+    needsReviewCount,
+    oldestUnsyncedAt: getOldestDateValue(queue, ["queuedAt", "saleDate"]),
+    lastSyncAttemptAt: getLatestDateValue(queuedActivity, ["lastAttemptAt"]),
+    lastSyncedAt: getLastSyncedAt(),
+    lastError: getLatestErrorValue(queuedActivity, queue),
+    isOnline: window.navigator.onLine,
+    reportedAt: new Date().toISOString(),
+    ...payloadExtra,
+  };
+  const signature = buildDeviceStatusSignature(payload);
+  const now = Date.now();
+
+  if (
+    !force &&
+    signature === lastDeviceStatusReportSignature &&
+    now - lastDeviceStatusReportAt < POS_DEVICE_STATUS_HEARTBEAT_MS
+  ) {
+    return {
+      success: true,
+      skipped: true,
+    };
+  }
+
+  try {
+    const response = await fetch("/api/pos/device-sync-status", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json().catch(() => null);
+    lastDeviceStatusReportSignature = signature;
+    lastDeviceStatusReportAt = now;
+
+    return result;
+  } catch {
+    return null;
+  }
 }
 
 function loadPosSyncActivity() {
@@ -475,6 +609,69 @@ function canUseBrowserApis() {
   return typeof window !== "undefined";
 }
 
+function getPosDeviceId() {
+  if (!canUseBrowserApis()) {
+    return "web-pos-unknown";
+  }
+
+  const existingDeviceId = `${window.localStorage.getItem(POS_DEVICE_ID_KEY) || ""}`.trim();
+
+  if (existingDeviceId) {
+    return existingDeviceId;
+  }
+
+  const deviceId = `web_pos_${createClientSaleId()}`;
+  window.localStorage.setItem(POS_DEVICE_ID_KEY, deviceId);
+
+  return deviceId;
+}
+
+function getNormalizedDateFromEntry(entry, keys) {
+  for (const key of keys) {
+    const normalizedDate = normalizeSaleDate(entry?.[key]);
+
+    if (normalizedDate) {
+      return normalizedDate;
+    }
+  }
+
+  const payload = entry?.payload || {};
+
+  for (const key of keys) {
+    const normalizedDate = normalizeSaleDate(payload?.[key]);
+
+    if (normalizedDate) {
+      return normalizedDate;
+    }
+  }
+
+  return "";
+}
+
+function getOldestDateValue(entries, keys) {
+  return (Array.isArray(entries) ? entries : [])
+    .map((entry) => getNormalizedDateFromEntry(entry, keys))
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right))[0] || "";
+}
+
+function getLatestDateValue(entries, keys) {
+  return (Array.isArray(entries) ? entries : [])
+    .map((entry) => getNormalizedDateFromEntry(entry, keys))
+    .filter(Boolean)
+    .sort((left, right) => right.localeCompare(left))[0] || "";
+}
+
+function getLatestErrorValue(activity, queue) {
+  return [...(Array.isArray(activity) ? activity : []), ...(Array.isArray(queue) ? queue : [])]
+    .filter((entry) => `${entry?.lastError || ""}`.trim())
+    .sort((left, right) =>
+      `${right?.lastAttemptAt || right?.updatedAt || right?.queuedAt || ""}`.localeCompare(
+        `${left?.lastAttemptAt || left?.updatedAt || left?.queuedAt || ""}`,
+      ),
+    )[0]?.lastError || "";
+}
+
 function createClientSaleId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -534,6 +731,7 @@ function upsertSyncActivityEntry(sourceEntry, overrides = {}) {
 
 function buildSyncActivityEntry(sourceEntry) {
   const payload = sourceEntry?.payload || {};
+  const sourceStatus = `${sourceEntry?.status || ""}`.trim().toLowerCase();
 
   return {
     id: `${sourceEntry?.id || ""}`.trim(),
@@ -543,7 +741,7 @@ function buildSyncActivityEntry(sourceEntry) {
     stationName: `${payload?.stationName || ""}`.trim(),
     cashierName: `${payload?.cashierName || ""}`.trim(),
     totalAmount: calculateQueuedSaleAmount(payload),
-    status: sourceEntry?.lastError ? "failed" : "queued",
+    status: sourceStatus || (sourceEntry?.lastError ? "failed" : "queued"),
     lastAttemptAt: normalizeSaleDate(sourceEntry?.lastAttemptAt),
     lastError: `${sourceEntry?.lastError || ""}`.trim(),
     lastSyncedAt: "",
@@ -554,6 +752,7 @@ function buildSyncActivityEntry(sourceEntry) {
 function serializeQueuedSale(sourceEntry, activityEntry) {
   const payload = sourceEntry?.payload || {};
   const resolvedStatus = `${activityEntry?.status || ""}`.trim();
+  const sourceStatus = `${sourceEntry?.status || ""}`.trim();
 
   return {
     id: `${sourceEntry?.id || ""}`.trim(),
@@ -565,7 +764,7 @@ function serializeQueuedSale(sourceEntry, activityEntry) {
     stationName: `${payload?.stationName || activityEntry?.stationName || ""}`.trim(),
     cashierName: `${payload?.cashierName || activityEntry?.cashierName || ""}`.trim(),
     totalAmount: calculateQueuedSaleAmount(payload),
-    status: resolvedStatus || (sourceEntry?.lastError ? "failed" : "queued"),
+    status: sourceStatus || resolvedStatus || (sourceEntry?.lastError ? "failed" : "queued"),
     lastAttemptAt:
       normalizeSaleDate(sourceEntry?.lastAttemptAt) ||
       normalizeSaleDate(activityEntry?.lastAttemptAt) ||

@@ -32,9 +32,10 @@ import {
   getPosSyncPanelSnapshot,
   getPosSyncStatusSnapshot,
   loadCachedPosBootstrap,
+  markPendingPosSaleNeedsReview,
   queuePendingPosSale,
   queuePendingPosReversal,
-  removePendingPosSale,
+  reportPosDeviceSyncStatus,
   saveCachedPosBootstrap,
   subscribeToPosSyncStatus,
   syncPendingPosSales,
@@ -573,7 +574,21 @@ export default function PosScreen() {
   const hydrateSyncState = useCallback(async () => {
     setSyncStatus(await getPosSyncStatusSnapshot());
     setSyncPanel(await getPosSyncPanelSnapshot());
-  }, []);
+    void reportPosDeviceSyncStatus({
+      token,
+      context: {
+        stationId: activeStation?.id || stationId,
+        stationName: currentStationName,
+        cashierName: currentCashierName,
+      },
+    });
+  }, [
+    activeStation?.id,
+    currentCashierName,
+    currentStationName,
+    stationId,
+    token,
+  ]);
 
   const loadBootstrap = useCallback(
     async ({ silent = false } = {}) => {
@@ -642,7 +657,15 @@ export default function PosScreen() {
         return;
       }
 
-      void syncPendingPosSales({ token }).then(hydrateSyncState).catch(() => {});
+      void getPosSyncStatusSnapshot()
+        .then((snapshot) => {
+          if (snapshot.pendingCount === 0) {
+            return hydrateSyncState();
+          }
+
+          return syncPendingPosSales({ token }).then(hydrateSyncState);
+        })
+        .catch(() => {});
     }, 15000);
 
     return () => clearInterval(intervalId);
@@ -1180,8 +1203,8 @@ export default function PosScreen() {
     }
   }
 
-  async function handleRemoveQueuedSale(saleId) {
-    await removePendingPosSale(saleId);
+  async function handleFlagQueuedSale(saleId) {
+    await markPendingPosSaleNeedsReview(saleId);
     await hydrateSyncState();
   }
 
@@ -2421,34 +2444,49 @@ export default function PosScreen() {
               {syncPanel.queuedSales.length === 0 ? (
                 <Text style={styles.emptySyncText}>No queued items.</Text>
               ) : (
-                syncPanel.queuedSales.map((entry) => (
-                  <View key={entry.id} style={styles.syncEntry}>
-                    <View style={styles.syncEntryTop}>
-                      <Text style={styles.syncEntryTitle}>
-                        {getQueuedEntryTypeLabel(entry)} ·{" "}
-                        {entry.stationName || "Unknown Station"} · {formatCurrency(entry.amount)}
+                syncPanel.queuedSales.map((entry) => {
+                  const entryStatus = `${entry?.status || ""}`.trim().toLowerCase();
+                  const isFlaggedForReview = entryStatus === "needs_review";
+
+                  return (
+                    <View key={entry.id} style={styles.syncEntry}>
+                      <View style={styles.syncEntryTop}>
+                        <Text style={styles.syncEntryTitle}>
+                          {getQueuedEntryTypeLabel(entry)} ·{" "}
+                          {entry.stationName || "Unknown Station"} · {formatCurrency(entry.amount)}
+                        </Text>
+                        <Pressable
+                          disabled={isFlaggedForReview}
+                          onPress={() => void handleFlagQueuedSale(entry.id)}
+                        >
+                          <Text
+                            style={[
+                              styles.syncReviewAction,
+                              isFlaggedForReview ? styles.syncReviewActionDisabled : null,
+                            ]}
+                          >
+                            {isFlaggedForReview ? "Flagged" : "Flag issue"}
+                          </Text>
+                        </Pressable>
+                      </View>
+                      <Text style={styles.syncEntryMeta}>
+                        {entry.cashierName || "POS Counter"} · {formatLastSyncedAt(entry.saleDate || entry.queuedAt)}
                       </Text>
-                      <Pressable onPress={() => void handleRemoveQueuedSale(entry.id)}>
-                        <Text style={styles.syncRemove}>Remove</Text>
-                      </Pressable>
+                      {entry.receiptNumber ? (
+                        <Text style={styles.syncEntryMeta}>{entry.receiptNumber}</Text>
+                      ) : null}
+                      <Text style={styles.syncEntryStatus}>
+                        Status: {entry.status}
+                        {entry.lastAttemptAt
+                          ? ` · Last attempt ${formatLastSyncedAt(entry.lastAttemptAt)}`
+                          : ""}
+                      </Text>
+                      {entry.lastError ? (
+                        <Text style={styles.syncEntryError}>{entry.lastError}</Text>
+                      ) : null}
                     </View>
-                    <Text style={styles.syncEntryMeta}>
-                      {entry.cashierName || "POS Counter"} · {formatLastSyncedAt(entry.saleDate || entry.queuedAt)}
-                    </Text>
-                    {entry.receiptNumber ? (
-                      <Text style={styles.syncEntryMeta}>{entry.receiptNumber}</Text>
-                    ) : null}
-                    <Text style={styles.syncEntryStatus}>
-                      Status: {entry.status}
-                      {entry.lastAttemptAt
-                        ? ` · Last attempt ${formatLastSyncedAt(entry.lastAttemptAt)}`
-                        : ""}
-                    </Text>
-                    {entry.lastError ? (
-                      <Text style={styles.syncEntryError}>{entry.lastError}</Text>
-                    ) : null}
-                  </View>
-                ))
+                  );
+                })
               )}
             </ScrollView>
           </View>
@@ -3636,10 +3674,13 @@ const createStyles = (palette) => {
       fontWeight: "700",
       color: palette.text,
     },
-    syncRemove: {
+    syncReviewAction: {
       fontSize: 12,
       fontWeight: "700",
       color: palette.primary,
+    },
+    syncReviewActionDisabled: {
+      color: palette.mutedText,
     },
     syncEntryMeta: {
       fontSize: 12,

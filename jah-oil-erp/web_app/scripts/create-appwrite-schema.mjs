@@ -552,9 +552,40 @@ const schema = [
     indexes: [
       uniqueIndex("pte_idem_uq", ["idempotency_key"]),
       keyIndex("pte_status_updated", ["status", "updated_at"]),
+      keyIndex("pte_updated_idx", ["updated_at"]),
       keyIndex("pte_receipt_idx", ["receipt_id"]),
       keyIndex("pte_station_updated", ["station_id", "updated_at"]),
       keyIndex("pte_type_status", ["transaction_type", "status"]),
+    ],
+  },
+  {
+    id: "pos_device_sync_status",
+    name: "POS Device Sync Status",
+    attributes: [
+      stringAttribute("device_id", 128),
+      enumAttribute("platform", ["web", "mobile", "unknown"]),
+      stringAttribute("app_version", 64, { required: false }),
+      stringAttribute("station_id", 64, { required: false }),
+      stringAttribute("station_name", 255, { required: false }),
+      stringAttribute("cashier_user_id", 64, { required: false }),
+      stringAttribute("cashier_name", 255, { required: false }),
+      enumAttribute("status", ["synced", "pending", "failed", "offline"]),
+      integerAttribute("pending_count"),
+      integerAttribute("failed_count"),
+      integerAttribute("needs_review_count"),
+      datetimeAttribute("oldest_unsynced_at", { required: false }),
+      datetimeAttribute("last_sync_attempt_at", { required: false }),
+      datetimeAttribute("last_synced_at", { required: false }),
+      stringAttribute("last_error", 1000, { required: false }),
+      booleanAttribute("is_online"),
+      datetimeAttribute("reported_at"),
+      datetimeAttribute("updated_at"),
+    ],
+    indexes: [
+      uniqueIndex("pds_device_uq", ["device_id"]),
+      keyIndex("pds_status_updated", ["status", "updated_at"]),
+      keyIndex("pds_station_updated", ["station_id", "updated_at"]),
+      keyIndex("pds_cashier_updated", ["cashier_user_id", "updated_at"]),
     ],
   },
   {
@@ -907,6 +938,9 @@ Optional flags:
   --projectId <id>
   --apiKey <key>
   --databaseId <id>
+  --requestRetries <number>
+  --requestRetryDelayMs <number>
+  --requestTimeoutMs <number>
   --dry-run
   --help
 `);
