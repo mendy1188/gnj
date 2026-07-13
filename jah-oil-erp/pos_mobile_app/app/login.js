@@ -9,8 +9,8 @@ import { useAuth } from "../features/auth/AuthProvider";
 import { getUserFacingErrorMessage } from "../features/errors/messages";
 import { useThemedStyles } from "../theme/ThemeProvider";
 
-const DEMO_EMAIL = "admin@jahoil.com";
-const DEMO_PASSWORD = "password";
+const DEMO_EMAIL = "";
+const DEMO_PASSWORD = "";
 
 export default function LoginScreen() {
   const styles = useThemedStyles(createStyles);
@@ -62,13 +62,8 @@ export default function LoginScreen() {
   return (
     <AuthShell
       eyebrow="Jah Oil POS"
-      title="Sign in to the mobile POS"
-      description="Use the same user account and branch permissions configured from the web admin panel."
-      footer={
-        <Text style={styles.footerText}>
-          Default demo credentials: {DEMO_EMAIL} / {DEMO_PASSWORD}
-        </Text>
-      }
+      title="Sign in"
+      description="Use your company email to sign in."
     >
       <View style={styles.form}>
         {errorMessage ? (
@@ -78,7 +73,7 @@ export default function LoginScreen() {
         ) : null}
         <AuthTextInput
           label="Email address"
-          placeholder="name@jahoil.com"
+          placeholder="Your Jah Oil email address"
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
@@ -96,7 +91,6 @@ export default function LoginScreen() {
           label={isSubmitting ? "Signing In..." : "Sign In"}
           onPress={handleSignIn}
           disabled={isSubmitting}
-          helperText="This mobile POS uses the same credential and role checks as the web ERP."
         />
       </View>
     </AuthShell>

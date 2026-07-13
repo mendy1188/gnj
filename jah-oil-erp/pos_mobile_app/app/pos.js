@@ -101,6 +101,25 @@ function parseCurrencyInput(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeTwoDecimalInput(value) {
+  const normalizedValue = `${value || ""}`
+    .replace(/,/g, ".")
+    .replace(/[^\d.]/g, "");
+
+  if (!normalizedValue) {
+    return "";
+  }
+
+  const [wholePart, decimalPart = "", ...extraParts] = normalizedValue.split(".");
+  const mergedDecimalPart = `${decimalPart}${extraParts.join("")}`.slice(0, 2);
+
+  if (normalizedValue.includes(".")) {
+    return `${wholePart || "0"}.${mergedDecimalPart}`;
+  }
+
+  return wholePart;
+}
+
 function getFuelQuantityFromAmount(amount, unitPrice) {
   const normalizedAmount = parseCurrencyInput(amount);
   const normalizedUnitPrice = Number(unitPrice || 0);
@@ -1021,9 +1040,13 @@ export default function PosScreen() {
       return;
     }
 
+    const normalizedAmountInput = normalizeTwoDecimalInput(amountInput);
+
     setCart((currentCart) =>
       currentCart.map((item) =>
-        item.name === productName ? { ...item, amountInput } : item,
+        item.name === productName
+          ? { ...item, amountInput: normalizedAmountInput }
+          : item,
       ),
     );
   }
@@ -2154,9 +2177,9 @@ export default function PosScreen() {
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderContent}>
                 <Text style={styles.modalTitle}>POS Settings</Text>
-                <Text style={styles.modalDescription}>
+                {/* <Text style={styles.modalDescription}>
                   Cashier session details and account actions.
-                </Text>
+                </Text> */}
               </View>
               <Pressable
                 onPress={() => setIsSettingsPanelOpen(false)}
@@ -2403,7 +2426,7 @@ export default function PosScreen() {
               <View style={styles.modalHeaderContent}>
                 <Text style={styles.modalTitle}>POS Sync Queue</Text>
                 <Text style={styles.modalDescription}>
-                  Pending POS actions are stored locally first and synced to the ERP when possible.
+                  Pending sales are stored locally first and synced to the HQ system when possible.
                 </Text>
               </View>
               <Pressable
@@ -2877,7 +2900,7 @@ const createStyles = (palette) => {
     },
     toast: {
       position: "absolute",
-      top: 16,
+      top: 48,
       right: 16,
       left: 16,
       zIndex: 20,
@@ -2987,7 +3010,7 @@ const createStyles = (palette) => {
       textAlign: "left",
     },
     productNamePhone: {
-      fontSize: 15,
+      fontSize: 13,
       lineHeight: 18,
     },
     productUnit: {
@@ -2999,7 +3022,7 @@ const createStyles = (palette) => {
       textAlign: "left",
     },
     productUnitPhone: {
-      fontSize: 12,
+      fontSize: 9,
       lineHeight: 15,
     },
     productIconWrap: {
@@ -3036,7 +3059,7 @@ const createStyles = (palette) => {
       textAlign: "left",
     },
     productPricePhone: {
-      fontSize: 14,
+      fontSize: 10,
       lineHeight: 17,
     },
     checkoutCard: {

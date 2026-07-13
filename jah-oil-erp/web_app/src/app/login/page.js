@@ -32,7 +32,7 @@ export default async function LoginPage({ searchParams }) {
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 shadow-xl">
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold text-white">JAH MULTI INDUSTRIES</h1>
-            <p className="mt-2 text-slate-400">ERP Management System</p>
+            <p className="mt-2 text-slate-400">Integrated Operations Platfrom</p>
           </div>
 
           <ToastMessage message={error} tone="error" />

@@ -1,9 +1,10 @@
 {
   "expo": {
-    "name": "Jah POS Mobile App",
-    "slug": "jah-pos-mobile-app",
+    "name": "Jah POS",
+    "slug": "jah-pos-app",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./images/jah-pos.png",
     "scheme": "jahposmobile",
     "userInterfaceStyle": "dark",
     "experiments": {
@@ -23,6 +24,7 @@
     "android": {
       "package": "com.jahoil.posmobile",
       "adaptiveIcon": {
+        "foregroundImage": "./images/jah-pos.png",
         "backgroundColor": "#0f172a"
       }
     },
@@ -32,6 +34,12 @@
     "plugins": [
       "expo-secure-store",
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c02b3101-5941-4bb8-a50a-74a91451c895"
+      }
+    },
+    "owner": "abmari"
   }
 }

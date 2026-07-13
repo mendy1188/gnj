@@ -2,7 +2,7 @@ import "./app.css";
 
 export const metadata = {
   title: "JAH MULTI INDUSTRIES",
-  description: "ERP Management System",
+  description: "Integrated Operations Platform",
   icons: {
     icon: "/favicon.svg",
   },

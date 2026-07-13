@@ -401,8 +401,8 @@ export default function Sidebar({
                   <h2 className="text-lg font-semibold uppercase">
                     Jah Multi Industries
                   </h2>
-                  <p className="text-xs tracking-[0.2em] text-slate-400">
-                    ERP Management System
+                  <p className="text-sm font-semibold text-slate-400">
+                    Integrated Operations Platform
                   </p>
                 </div>
               )}

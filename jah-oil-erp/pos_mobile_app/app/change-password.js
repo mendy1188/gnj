@@ -48,7 +48,7 @@ export default function ChangePasswordScreen() {
     <AuthShell
       eyebrow="Password Change"
       title="Update your temporary password"
-      description="This matches the web ERP workflow. You must set a new password before using the mobile POS."
+      description="You must set a new password before using the mobile POS."
     >
       <View style={styles.form}>
         {errorMessage ? (
