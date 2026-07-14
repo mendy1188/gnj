@@ -4,7 +4,6 @@ import { Client, Databases, ID, Query } from "appwrite";
 
 import {
   DEFAULT_ROLE_DEFINITIONS,
-  DEFAULT_ROLE_MODULES_BY_CODE,
   MODULE_DEFINITIONS,
 } from "@/features/auth/session";
 import { getServerAppwriteConfig, hasServerAppwriteConfig } from "@/lib/env";
@@ -46,10 +45,6 @@ function parseModules(modulesValue) {
 }
 
 function normalizeRoleDocument(document) {
-  const allowedModules = new Set(
-    DEFAULT_ROLE_MODULES_BY_CODE[document.code] || MODULE_DEFINITIONS.map((module) => module.key),
-  );
-
   return {
     id: document.$id,
     code: document.code || "",
@@ -57,8 +52,7 @@ function normalizeRoleDocument(document) {
     status: document.status || "active",
     branchRequired: Boolean(document.branch_required),
     modules: parseModules(document.modules_json).filter((moduleKey) =>
-      MODULE_DEFINITIONS.some((module) => module.key === moduleKey) &&
-      allowedModules.has(moduleKey),
+      MODULE_DEFINITIONS.some((module) => module.key === moduleKey),
     ),
   };
 }
@@ -83,6 +77,26 @@ function normalizeUserDocument(document) {
 
 function roleDocumentId(code) {
   return `role_${String(code || "").replaceAll(/[^a-z0-9_-]/gi, "").slice(0, 28)}`;
+}
+
+function roleCodeFromName(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 48);
+}
+
+function normalizeRoleModules(modules) {
+  return Array.from(
+    new Set(
+      (Array.isArray(modules) ? modules : []).filter((moduleKey) =>
+        MODULE_DEFINITIONS.some((module) => module.key === moduleKey),
+      ),
+    ),
+  );
 }
 
 export async function ensureDefaultRoles() {
@@ -111,20 +125,15 @@ export async function ensureDefaultRoles() {
       continue;
     }
 
-    const existingModules = parseModules(existingRole.modules_json);
-    const nextModules = Array.from(new Set([...existingModules, ...role.modules]));
-
     if (
       existingRole.name === role.name &&
-      Boolean(existingRole.branch_required) === role.branchRequired &&
-      JSON.stringify(existingModules) === JSON.stringify(nextModules)
+      Boolean(existingRole.branch_required) === role.branchRequired
     ) {
       continue;
     }
 
     await databases.updateDocument(databaseId, COLLECTIONS.roles, existingRole.$id, {
       name: role.name,
-      modules_json: JSON.stringify(nextModules),
       branch_required: role.branchRequired,
     });
   }
@@ -272,6 +281,32 @@ export async function createUserRecord({
   return normalizeUserDocument(document);
 }
 
+export async function createRoleRecord({ name, branchRequired = true, modules = [] }) {
+  const normalizedName = String(name || "").trim();
+  const code = roleCodeFromName(normalizedName);
+
+  if (!normalizedName || !code) {
+    throw new Error("Role name is required.");
+  }
+
+  const { databases, databaseId } = createDatabasesClient();
+  const validModules = normalizeRoleModules(modules);
+  const document = await databases.createDocument(
+    databaseId,
+    COLLECTIONS.roles,
+    roleDocumentId(code),
+    {
+      code,
+      name: normalizedName,
+      modules_json: JSON.stringify(validModules),
+      branch_required: Boolean(branchRequired),
+      status: "active",
+    },
+  );
+
+  return normalizeRoleDocument(document);
+}
+
 export async function updateUserPassword(
   userId,
   passwordHash,
@@ -313,17 +348,7 @@ export async function updateRoleModules(roleId, modules) {
     throw new Error("Role not found.");
   }
 
-  const allowedModules = new Set(
-    DEFAULT_ROLE_MODULES_BY_CODE[role.code] || MODULE_DEFINITIONS.map((module) => module.key),
-  );
-  const validModules = Array.from(
-    new Set(
-      (Array.isArray(modules) ? modules : []).filter((moduleKey) =>
-        MODULE_DEFINITIONS.some((module) => module.key === moduleKey) &&
-        allowedModules.has(moduleKey),
-      ),
-    ),
-  );
+  const validModules = normalizeRoleModules(modules);
 
   if (role.code === "admin" && !validModules.includes("admin")) {
     validModules.push("admin");

@@ -9,7 +9,7 @@ function normalizeRoleName(roleName) {
 export function isPrivilegedRole(roleName) {
   const normalizedRoleName = normalizeRoleName(roleName);
 
-  return [ROLE_NAMES.ADMIN, ROLE_NAMES.GENERAL_MANAGER].some(
+  return [ROLE_NAMES.ADMIN, ROLE_NAMES.GENERAL_MANAGER, ROLE_NAMES.FINANCE].some(
     (name) => normalizeRoleName(name) === normalizedRoleName,
   );
 }

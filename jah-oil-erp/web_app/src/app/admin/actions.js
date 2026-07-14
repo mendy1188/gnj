@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import {
+  createRoleRecord,
   createUserRecord,
   deleteUserRecord,
   getUserById,
@@ -191,6 +192,40 @@ export async function deleteUserAction(formData) {
     message: `${user.fullName || "User"} was deleted.`,
     deletedUserId: user.id,
   };
+}
+
+export async function createRoleAction(formData) {
+  await requireModuleAccess("admin");
+
+  const name = String(formData.get("roleName") || "").trim();
+  const branchRequired = String(formData.get("branchRequired") || "") === "on";
+  const modules = formData
+    .getAll("modules")
+    .map((value) => String(value || ""))
+    .filter(Boolean);
+
+  if (!name) {
+    redirect(toAdminUrl({ error: "Role name is required." }));
+  }
+
+  try {
+    await createRoleRecord({
+      name,
+      branchRequired,
+      modules,
+    });
+  } catch (error) {
+    if (error?.code === 409) {
+      redirect(
+        toAdminUrl({ error: "A role with that name or code already exists." }),
+      );
+    }
+
+    throw error;
+  }
+
+  revalidateAdminRoutes();
+  redirect(toAdminUrl({ success: "Role created successfully." }));
 }
 
 export async function updateRoleModulesAction(formData) {

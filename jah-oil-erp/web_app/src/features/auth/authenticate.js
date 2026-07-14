@@ -2,11 +2,6 @@ import "server-only";
 
 import { findUserByEmail, getRoleById } from "@/features/auth/data";
 import { verifyPassword } from "@/features/auth/password";
-import {
-  DEMO_EMAIL,
-  DEMO_PASSWORD,
-  DEMO_SESSION,
-} from "@/features/auth/session";
 
 function buildUserSession(user, role) {
   return {
@@ -21,10 +16,6 @@ function buildUserSession(user, role) {
     mustChangePassword: user.mustChangePassword,
     status: user.status,
   };
-}
-
-function isDemoLoginEnabled() {
-  return process.env.ALLOW_DEMO_LOGIN === "true";
 }
 
 export async function authenticateCredentials(emailInput, passwordInput) {
@@ -58,13 +49,6 @@ export async function authenticateCredentials(emailInput, passwordInput) {
     }
   } catch (error) {
     console.error("Appwrite auth lookup failed:", error);
-  }
-
-  if (isDemoLoginEnabled() && email === DEMO_EMAIL && password === DEMO_PASSWORD) {
-    return {
-      success: true,
-      session: DEMO_SESSION,
-    };
   }
 
   return {

@@ -2614,14 +2614,14 @@ const createStyles = (palette) => {
       gap: 2,
     },
     headerEyebrow: {
-      fontSize: 20,
+      fontSize: 14,
       fontWeight: "800",
       letterSpacing: 2,
       textTransform: "uppercase",
       color: palette.accent,
     },
     headerTitle: {
-      fontSize: 24,
+      fontSize: 16,
       fontWeight: "800",
       color: palette.text,
     },

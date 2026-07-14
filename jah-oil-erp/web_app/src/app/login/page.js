@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { loginAction } from "@/features/auth/actions";
-import { DEMO_EMAIL, DEMO_PASSWORD } from "@/features/auth/session";
 import ToastMessage from "@/components/ui/ToastMessage";
+
+import LoginSubmitButton from "./LoginSubmitButton";
 
 export default async function LoginPage({ searchParams }) {
   const params = await searchParams;
@@ -73,29 +73,8 @@ export default async function LoginPage({ searchParams }) {
               />
             </div>
 
-            <button
-              type="submit"
-              className="cursor-pointer w-full rounded-lg bg-sky-600 py-2 font-semibold text-white transition-colors hover:bg-sky-700"
-            >
-              Sign In
-            </button>
+            <LoginSubmitButton />
           </form>
-
-          {/* <div className="mt-6 text-center text-sm text-slate-400">
-            <p>Default Credentials:</p>
-            <p className="mt-1 font-mono text-xs">
-              {DEMO_EMAIL} / {DEMO_PASSWORD}
-            </p>
-          </div>
-
-          <div className="mt-6 text-center text-sm text-slate-400">
-            <Link
-              href="/"
-              className="text-sky-300 transition hover:text-sky-100"
-            >
-              Back to home
-            </Link>
-          </div> */}
         </div>
       </div>
     </div>

@@ -1,11 +1,10 @@
 const AUTH_COOKIE = "jah_oil_session";
 const ONE_DAY = 60 * 60 * 24;
-const DEMO_EMAIL = "admin@jahoil.com";
-const DEMO_PASSWORD = "password";
 
 const ROLE_NAMES = {
   ADMIN: "Admin",
   GENERAL_MANAGER: "General Manager",
+  FINANCE: "Finance",
   BRANCH_MANAGER: "Branch Manager",
   GENERAL_SALES: "General Sales",
   FUEL_SALES: "Fuel Sales",
@@ -160,6 +159,23 @@ const DEFAULT_ROLE_DEFINITIONS = [
     ).map((module) => module.key),
   },
   {
+    code: "finance",
+    name: ROLE_NAMES.FINANCE,
+    branchRequired: false,
+    modules: [
+      "dashboard",
+      "stations",
+      "inventory",
+      "fuel-deliveries",
+      "fuel-sales",
+      "commodities-sales",
+      "cement",
+      "bulk-fuel-purchases",
+      "balance-management",
+      "reports",
+    ],
+  },
+  {
     code: "branch_manager",
     name: ROLE_NAMES.BRANCH_MANAGER,
     branchRequired: true,
@@ -193,19 +209,6 @@ const DEFAULT_ROLE_MODULES_BY_CODE = Object.fromEntries(
   DEFAULT_ROLE_DEFINITIONS.map((role) => [role.code, role.modules]),
 );
 
-const DEMO_SESSION = {
-  userId: "demo-admin",
-  fullName: "System Admin",
-  email: DEMO_EMAIL,
-  roleId: "demo-admin-role",
-  roleName: ROLE_NAMES.ADMIN,
-  modules: MODULE_DEFINITIONS.map((module) => module.key),
-  branchId: "",
-  branchName: "",
-  mustChangePassword: false,
-  status: "active",
-};
-
 function getProtectedRouteKeys() {
   return MODULE_DEFINITIONS.map((module) => module.key);
 }
@@ -219,7 +222,11 @@ function getModuleForPath(pathname) {
 }
 
 function requiresBranchAssignment(roleName) {
-  return ![ROLE_NAMES.ADMIN, ROLE_NAMES.GENERAL_MANAGER].includes(roleName);
+  return ![
+    ROLE_NAMES.ADMIN,
+    ROLE_NAMES.GENERAL_MANAGER,
+    ROLE_NAMES.FINANCE,
+  ].includes(roleName);
 }
 
 function isProductionRuntime() {
@@ -389,9 +396,6 @@ export {
   AUTH_COOKIE,
   DEFAULT_ROLE_MODULES_BY_CODE,
   DEFAULT_ROLE_DEFINITIONS,
-  DEMO_EMAIL,
-  DEMO_PASSWORD,
-  DEMO_SESSION,
   MODULE_DEFINITIONS,
   MODULE_ROUTE_MAP,
   ONE_DAY,
