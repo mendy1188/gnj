@@ -89,6 +89,7 @@ export async function completePosSaleAction(payload, options = {}) {
   const session = options.sessionOverride || (await getCurrentSession());
   const customerName = `${payload?.customerName || ""}`.trim();
   const customerPhone = `${payload?.customerPhone || ""}`.trim();
+  const customerEmail = `${payload?.customerEmail || ""}`.trim().toLowerCase();
   const vehicleRegistrationNumber = `${payload?.vehicleRegistrationNumber || ""}`.trim();
   const companyOrOrganizationName = `${payload?.companyOrOrganizationName || ""}`.trim();
   const billableTo = `${payload?.billableTo || ""}`.trim();
@@ -425,6 +426,7 @@ export async function completePosSaleAction(payload, options = {}) {
       station,
       customerName,
       customerPhone,
+      customerEmail,
       companyOrOrganizationName,
       couponCode,
       bulkReferenceCode,
@@ -1437,6 +1439,7 @@ async function prepareCustomerBalanceOperation(
     station,
     customerName,
     customerPhone,
+    customerEmail,
     companyOrOrganizationName,
     couponCode,
     bulkReferenceCode,
@@ -1473,6 +1476,7 @@ async function prepareCustomerBalanceOperation(
   const normalizedAmount = Number(totalAmount || 0);
   const normalizedCustomerName = `${customerName || ""}`.trim() || "Walk-in Customer";
   const normalizedCustomerPhone = `${customerPhone || ""}`.trim();
+  const normalizedCustomerEmail = `${customerEmail || ""}`.trim().toLowerCase();
   const referenceCode =
     paymentFlow === "bulk-redeem"
         ? `${bulkReferenceCode || ""}`.trim()
@@ -1495,6 +1499,7 @@ async function prepareCustomerBalanceOperation(
       accountDocument: existingAccount,
       customerName: normalizedCustomerName,
       customerPhone: normalizedCustomerPhone,
+      customerEmail: normalizedCustomerEmail || existingAccount?.customer_email || "",
       stationId: station.$id,
       stationName: station.name || "",
       productId: existingAccount?.product_id || productBinding.productId || "",
@@ -1554,6 +1559,8 @@ async function prepareCustomerBalanceOperation(
     customerName: existingAccount.customer_name || normalizedCustomerName,
     customerPhone:
       existingAccount.customer_phone || normalizedCustomerPhone,
+    customerEmail:
+      existingAccount.customer_email || normalizedCustomerEmail,
     stationId:
       existingAccount.station_id || station.$id,
     stationName:
@@ -1645,15 +1652,15 @@ async function applyCustomerBalanceOperation(databases, operation, context) {
   let accountDocument = operation.accountDocument || null;
 
   if (!accountDocument) {
-    accountDocument = await databases.createDocument(
+    accountDocument = await createCustomerBalanceDocument(
+      databases,
       databaseId,
-      COLLECTIONS.customerBalances,
-      ID.unique(),
       {
         account_type: operation.accountType,
         reference_code: operation.referenceCode,
         customer_name: operation.customerName,
         customer_phone: operation.customerPhone,
+        customer_email: operation.customerEmail || "",
         station_id: operation.stationId,
         station_name: operation.stationName,
         product_id: operation.productId || "",
@@ -1670,13 +1677,14 @@ async function applyCustomerBalanceOperation(databases, operation, context) {
       },
     );
   } else {
-    accountDocument = await databases.updateDocument(
+    accountDocument = await updateCustomerBalanceDocument(
+      databases,
       databaseId,
-      COLLECTIONS.customerBalances,
       accountDocument.$id,
       {
         customer_name: operation.customerName,
         customer_phone: operation.customerPhone,
+        customer_email: operation.customerEmail || accountDocument.customer_email || "",
         station_id: operation.stationId,
         station_name: operation.stationName,
         product_id: operation.productId || "",
@@ -1721,6 +1729,61 @@ async function applyCustomerBalanceOperation(databases, operation, context) {
   );
 
   return accountDocument;
+}
+
+async function createCustomerBalanceDocument(databases, databaseId, payload) {
+  try {
+    return await databases.createDocument(
+      databaseId,
+      COLLECTIONS.customerBalances,
+      ID.unique(),
+      payload,
+    );
+  } catch (error) {
+    if (!isUnsupportedCustomerEmailError(error)) {
+      throw error;
+    }
+
+    const { customer_email: _ignoredCustomerEmail, ...legacyPayload } = payload;
+    return databases.createDocument(
+      databaseId,
+      COLLECTIONS.customerBalances,
+      ID.unique(),
+      legacyPayload,
+    );
+  }
+}
+
+async function updateCustomerBalanceDocument(
+  databases,
+  databaseId,
+  documentId,
+  payload,
+) {
+  try {
+    return await databases.updateDocument(
+      databaseId,
+      COLLECTIONS.customerBalances,
+      documentId,
+      payload,
+    );
+  } catch (error) {
+    if (!isUnsupportedCustomerEmailError(error)) {
+      throw error;
+    }
+
+    const { customer_email: _ignoredCustomerEmail, ...legacyPayload } = payload;
+    return databases.updateDocument(
+      databaseId,
+      COLLECTIONS.customerBalances,
+      documentId,
+      legacyPayload,
+    );
+  }
+}
+
+function isUnsupportedCustomerEmailError(error) {
+  return `${error?.message || ""}`.toLowerCase().includes("customer_email");
 }
 
 async function prepareCouponBalanceOperation(

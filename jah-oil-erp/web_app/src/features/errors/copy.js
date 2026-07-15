@@ -222,6 +222,12 @@ export function resolveRouteMeta(pathname = "") {
       genericLabel: "load Rewards Management",
     };
   }
+  if (route.startsWith("/notification-settings")) {
+    return {
+      moduleName: "Notification Settings",
+      genericLabel: "load Notification Settings",
+    };
+  }
   if (route.startsWith("/station-settings")) {
     return {
       moduleName: "Station Settings",

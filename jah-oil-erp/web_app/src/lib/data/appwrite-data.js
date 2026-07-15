@@ -1843,6 +1843,7 @@ export const getCustomerBalanceAccountsData = cache(async () => {
       referenceCode: document.reference_code || "",
       customerName: document.customer_name || "",
       customerPhone: document.customer_phone || "",
+      customerEmail: document.customer_email || "",
       stationId: document.station_id || "",
       stationName: document.station_name || "",
       productId: document.product_id || "",

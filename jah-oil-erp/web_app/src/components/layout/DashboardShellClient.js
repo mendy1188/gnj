@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-import { AppIcon } from "@/components/ui/AppIcon";
+import NotificationBell from "./NotificationBell";
 import Sidebar from "./Sidebar";
 
 const CLIENT_REFRESH_STORAGE_PREFIX = "jah-erp-route-refresh:";
@@ -138,17 +138,7 @@ export default function DashboardShellClient({
                 }`}
               >
                 {actions}
-                <button
-                  type="button"
-                  className={`inline-flex cursor-pointer items-center justify-center border border-slate-200 bg-slate-100 text-slate-700 transition hover:bg-slate-200 ${
-                    isPosPage
-                      ? "h-10 w-10 rounded-2xl text-lg sm:h-10 sm:w-10 lg:h-11 lg:w-11 lg:rounded-3xl"
-                      : "h-11 w-11 rounded-3xl"
-                  }`}
-                  aria-label="Notifications"
-                >
-                  <AppIcon name="bell" className="h-5 w-5" />
-                </button>
+                <NotificationBell isCompact={isPosPage} />
                 <form
                   action={logoutAction}
                   className={isPosPage ? "shrink-0" : ""}

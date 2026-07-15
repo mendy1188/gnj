@@ -93,6 +93,12 @@ const MODULE_DEFINITIONS = [
   { key: "reports", label: "Reports", href: "/reports", icon: "📈" },
   { key: "admin", label: "Users / Roles", href: "/admin", icon: "🛡️" },
   {
+    key: "notification-settings",
+    label: "Notification Settings",
+    href: "/notification-settings",
+    icon: "bell",
+  },
+  {
     key: "pos-envelopes",
     label: "POS Repairs",
     href: "/admin/pos-repairs",
@@ -129,6 +135,7 @@ const NAVIGATION_DEFINITIONS = [
       "reverse-transactions",
       "pos-envelopes",
       "admin",
+      "notification-settings",
     ],
   },
 ];
@@ -152,6 +159,7 @@ const DEFAULT_ROLE_DEFINITIONS = [
       (module) =>
         ![
           "admin",
+          "notification-settings",
           "pos-envelopes",
           "payment-methods",
           "balance-management",
@@ -308,7 +316,8 @@ function buildNavigationItems(allowedModuleKeys = []) {
           (module) =>
             module &&
             (allowedModules.has(module.key) ||
-              (module.key === "pos-envelopes" && allowedModules.has("admin"))),
+              (["notification-settings", "pos-envelopes"].includes(module.key) &&
+                allowedModules.has("admin"))),
         )
         .map(toNavigationItem);
 

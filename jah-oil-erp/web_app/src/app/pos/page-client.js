@@ -721,6 +721,7 @@ export default function PosPageClient({
   );
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [vehicleRegistrationNumber, setVehicleRegistrationNumber] = useState("");
   const [companyOrOrganizationName, setCompanyOrOrganizationName] = useState("");
   const [billableTo, setBillableTo] = useState("");
@@ -1100,6 +1101,7 @@ export default function PosPageClient({
       cashierName,
       customerName,
       customerPhone,
+      customerEmail,
       vehicleRegistrationNumber,
       companyOrOrganizationName,
       billableTo,
@@ -1161,6 +1163,7 @@ export default function PosPageClient({
           setCart([]);
           setCustomerName("");
           setCustomerPhone("");
+          setCustomerEmail("");
           setVehicleRegistrationNumber("");
           setCompanyOrOrganizationName("");
           setBillableTo("");
@@ -1196,6 +1199,7 @@ export default function PosPageClient({
         setCart([]);
         setCustomerName("");
         setCustomerPhone("");
+        setCustomerEmail("");
         setVehicleRegistrationNumber("");
         setCompanyOrOrganizationName("");
         setBillableTo("");
@@ -1543,6 +1547,18 @@ export default function PosPageClient({
 
             {isCreditPaymentMethod(paymentMethod) ? (
               <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-[10px] tracking-[0.2em] text-slate-400 uppercase">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={customerEmail}
+                    onChange={(event) => setCustomerEmail(event.target.value)}
+                    placeholder="Optional for email reminders"
+                    className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition outline-none focus:border-sky-500"
+                  />
+                </div>
                 <div>
                   <label className="text-[10px] tracking-[0.2em] text-slate-400 uppercase">
                     Credit Due Date
