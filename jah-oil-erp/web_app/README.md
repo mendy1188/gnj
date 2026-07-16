@@ -47,6 +47,7 @@ NEXT_PUBLIC_APPWRITE_ENDPOINT=
 NEXT_PUBLIC_APPWRITE_PROJECT_ID=
 APPWRITE_DATABASE_ID=
 APPWRITE_API_KEY=
+APPWRITE_PRODUCT_IMAGES_BUCKET_ID=product-images
 ```
 
 `APPWRITE_API_KEY` must be a server key with database write access.
@@ -62,6 +63,23 @@ Optional dry run:
 ```bash
 node scripts/create-appwrite-schema.mjs --dry-run
 ```
+
+### Upload product images to Appwrite Storage
+
+The schema script creates the public product image bucket. After products exist,
+upload the product icons and write their Storage file IDs back to product records:
+
+```bash
+npm run appwrite:upload-product-images
+```
+
+Dry run:
+
+```bash
+npm run appwrite:upload-product-images -- --dry-run
+```
+
+Run this again after any reset/seed that recreates product documents.
 
 ### Seed mock records
 

@@ -65,6 +65,7 @@ const DEFAULT_CREATE_FORM = {
   price: "",
   reorderLevel: "",
   description: "",
+  productIcon: null,
 };
 
 const DEFAULT_PRICE_FORM = {
@@ -184,6 +185,7 @@ export default function ProductSettingsPageClient({
   const [historyPage, setHistoryPage] = useState(1);
   const [feedback, setFeedback] = useState(null);
   const [createForm, setCreateForm] = useState(DEFAULT_CREATE_FORM);
+  const [createIconInputKey, setCreateIconInputKey] = useState(0);
   const [priceForm, setPriceForm] = useState(DEFAULT_PRICE_FORM);
   const [reorderForm, setReorderForm] = useState(DEFAULT_REORDER_FORM);
 
@@ -293,16 +295,26 @@ export default function ProductSettingsPageClient({
     setFeedback(null);
 
     startTransition(async () => {
-      const result = await createProductAction({
-        ...createForm,
-        price: Number(createForm.price || 0),
-        reorderLevel: Number(createForm.reorderLevel || 0),
-      });
+      const formData = new FormData();
+
+      formData.append("name", createForm.name);
+      formData.append("category", createForm.category);
+      formData.append("unit", createForm.unit);
+      formData.append("price", `${Number(createForm.price || 0)}`);
+      formData.append("reorderLevel", `${Number(createForm.reorderLevel || 0)}`);
+      formData.append("description", createForm.description);
+
+      if (createForm.productIcon) {
+        formData.append("productIcon", createForm.productIcon);
+      }
+
+      const result = await createProductAction(formData);
 
       setFeedback(result);
 
       if (result?.success) {
         setCreateForm(DEFAULT_CREATE_FORM);
+        setCreateIconInputKey((current) => current + 1);
         setSelectedProductId(result.productId || "");
         router.refresh();
       }
@@ -527,6 +539,25 @@ export default function ProductSettingsPageClient({
                       className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 transition outline-none focus:border-sky-500"
                       placeholder="Optional description"
                     />
+                  </div>
+                  <div>
+                    <CompactFieldLabel htmlFor="productIcon">product icon</CompactFieldLabel>
+                    <input
+                      key={createIconInputKey}
+                      id="productIcon"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      onChange={(event) =>
+                        updateCreateForm(
+                          "productIcon",
+                          event.target.files?.[0] || null,
+                        )
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 file:mr-3 file:cursor-pointer file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      PNG, JPG, WEBP, or SVG. Max 5MB. Stored in Appwrite Storage.
+                    </p>
                   </div>
                   <CompactActionButton
                     onClick={handleCreateProduct}

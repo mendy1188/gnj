@@ -1,12 +1,12 @@
 const ICON_MAP = [
-  { match: "petrol", icon: "petrol" },
-  { match: "diesel", icon: "diesel" },
-  { match: "rice (50kg)", icon: "rice-50" },
-  { match: "rice (25kg)", icon: "rice-25" },
+  { match: "petrol", icon: "⛽" },
+  { match: "diesel", icon: "🛢️" },
+  { match: "rice (50kg)", icon: "🍚" },
+  { match: "rice (25kg)", icon: "🍚" },
   { match: "sugar", icon: "🍚" },
-  { match: "cooking oil", icon: "oil" },
-  { match: "cement", icon: "cement" },
-  { match: "onion", icon: "onion" },
+  { match: "cooking oil", icon: "🫗" },
+  { match: "cement", icon: "🧱" },
+  { match: "onion", icon: "🧅" },
 ];
 
 export function getProductIcon(productName) {

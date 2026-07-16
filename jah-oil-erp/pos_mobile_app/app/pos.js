@@ -44,18 +44,23 @@ import { getUserFacingErrorMessage } from "../features/errors/messages";
 import { useAppTheme, useThemedStyles } from "../theme/ThemeProvider";
 
 const TRANSACTIONS_PAGE_SIZE = 20;
-const PRODUCT_IMAGE_ICONS = {
-  petrol: require("../images/icons/petrol-icon.png"),
-  diesel: require("../images/icons/diesel-icon.png"),
-  "rice-50": require("../images/icons/jah-rice-50kg.png"),
-  "rice-25": require("../images/icons/jah-rice-25kg.png"),
-  oil: require("../images/icons/cooking-oil50l.png"),
-  cement: require("../images/icons/cement.png"),
-  onion: require("../images/icons/onions.png"),
-};
 
 function formatCurrency(value) {
   return `D${Number(value || 0).toLocaleString()}`;
+}
+
+function prefetchProductImages(products = []) {
+  const imageUrls = [
+    ...new Set(
+      products
+        .map((product) => `${product?.imageUrl || ""}`.trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  imageUrls.forEach((imageUrl) => {
+    Image.prefetch(imageUrl).catch(() => {});
+  });
 }
 
 function normalizeProductIdentity(value) {
@@ -486,6 +491,8 @@ export default function PosScreen() {
         unit: product.unit || "unit",
         category: product.category || "shop",
         icon: getProductIcon(product.name),
+        imageUrl: product.imageUrl || "",
+        imageAlt: product.imageAlt || product.name || "",
       }))
       .sort((left, right) => getProductOrder(left.name) - getProductOrder(right.name));
   }, [bootstrap]);
@@ -629,6 +636,7 @@ export default function PosScreen() {
           paymentMethods: result?.paymentMethods || [],
         };
 
+        prefetchProductImages(nextBootstrap.products);
         setBootstrap(nextBootstrap);
         await saveCachedPosBootstrap(nextBootstrap);
         setBootstrapNotice("");
@@ -636,6 +644,7 @@ export default function PosScreen() {
         const cachedBootstrap = await loadCachedPosBootstrap();
 
         if (cachedBootstrap) {
+          prefetchProductImages(cachedBootstrap.products || []);
           setBootstrap(cachedBootstrap);
           setBootstrapNotice(
             "Showing cached POS data. New sales still queue locally and will sync later.",
@@ -1481,9 +1490,10 @@ export default function PosScreen() {
                                 isMobilePhone ? styles.productIconWrapPhone : null,
                               ]}
                             >
-                              {PRODUCT_IMAGE_ICONS[product.icon] ? (
+                              {product.imageUrl ? (
                                 <Image
-                                  source={PRODUCT_IMAGE_ICONS[product.icon]}
+                                  source={{ uri: product.imageUrl }}
+                                  accessibilityLabel={product.imageAlt || product.name}
                                   style={[
                                     styles.productIconImage,
                                     isMobilePhone ? styles.productIconImagePhone : null,

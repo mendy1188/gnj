@@ -37,6 +37,9 @@ const COLLECTIONS = {
   posDeviceSyncStatus: "pos_device_sync_status",
 };
 
+const DEFAULT_PRODUCT_IMAGES_BUCKET_ID =
+  process.env.APPWRITE_PRODUCT_IMAGES_BUCKET_ID || "product-images";
+
 const DEFAULT_PAGE_LIMIT = getPositiveInteger(
   process.env.APPWRITE_LIST_PAGE_LIMIT,
   500,
@@ -1613,19 +1616,48 @@ export const getStationsData = cache(async () => {
   }));
 });
 
+function buildProductImageUrl(document) {
+  const imageFileId = `${document?.image_file_id || ""}`.trim();
+  const imageBucketId = `${document?.image_bucket_id || DEFAULT_PRODUCT_IMAGES_BUCKET_ID}`.trim();
+
+  if (!imageFileId || !imageBucketId || !hasServerAppwriteConfig()) {
+    return "";
+  }
+
+  const config = getServerAppwriteConfig();
+
+  if (!config.apiBaseUrl || !config.projectId) {
+    return "";
+  }
+
+  return `${config.apiBaseUrl}/storage/buckets/${encodeURIComponent(
+    imageBucketId,
+  )}/files/${encodeURIComponent(imageFileId)}/view?project=${encodeURIComponent(
+    config.projectId,
+  )}`;
+}
+
+function mapProductDocument(document) {
+  return {
+    id: document.$id,
+    name: document.name || "",
+    sku: document.sku || "",
+    category: document.category || "",
+    unit: document.unit || "",
+    status: document.status || "active",
+    price: Number(document.selling_price || 0),
+    imageBucketId: document.image_bucket_id || "",
+    imageFileId: document.image_file_id || "",
+    imageAlt: document.image_alt || document.name || "",
+    imageUrl: buildProductImageUrl(document),
+  };
+}
+
 export const getProductsData = cache(async () => {
   const documents = await getProductDocuments();
 
   return documents
-    .map((document) => ({
-      id: document.$id,
-      name: document.name || "",
-      sku: document.sku || "",
-      category: document.category || "",
-      unit: document.unit || "",
-      status: document.status || "active",
-      price: Number(document.selling_price || 0),
-    }))
+    .map(mapProductDocument)
     .filter((record) => record.name && record.status === "active");
 });
 
@@ -1634,13 +1666,7 @@ export const getProductSettingsData = cache(async () => {
 
   return documents
     .map((document) => ({
-      id: document.$id,
-      name: document.name || "",
-      sku: document.sku || "",
-      category: document.category || "",
-      unit: document.unit || "",
-      status: document.status || "active",
-      price: Number(document.selling_price || 0),
+      ...mapProductDocument(document),
       description: document.description || "",
     }))
     .filter((record) => record.name)

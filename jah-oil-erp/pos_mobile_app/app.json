@@ -15,7 +15,7 @@
       "backgroundColor": "#0f172a"
     },
     "assetBundlePatterns": [
-      "**/*"
+      "images/jah-pos.png"
     ],
     "ios": {
       "supportsTablet": true,

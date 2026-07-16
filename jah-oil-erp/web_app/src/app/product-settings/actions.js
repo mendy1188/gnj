@@ -1,6 +1,6 @@
 "use server";
 
-import { Client, Databases, ID, Query } from "appwrite";
+import { Client, Databases, ID, Query, Storage } from "appwrite";
 import { revalidatePath, revalidateTag } from "next/cache";
 
 import { requireModuleAccess } from "@/features/auth/server";
@@ -18,6 +18,16 @@ const COLLECTIONS = {
 const ACTIVE_STATUS = "active";
 const INACTIVE_STATUS = "inactive";
 const VALID_CATEGORIES = new Set(["fuel", "shop", "cement"]);
+const PRODUCT_IMAGES_BUCKET_ID =
+  process.env.APPWRITE_PRODUCT_IMAGES_BUCKET_ID || "product-images";
+const PRODUCT_ICON_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const VALID_PRODUCT_ICON_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/svg+xml",
+]);
+const VALID_PRODUCT_ICON_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "svg"]);
 
 export async function createProductAction(payload) {
   if (!hasServerAppwriteConfig()) {
@@ -28,12 +38,14 @@ export async function createProductAction(payload) {
   }
 
   const session = await requireModuleAccess("product-settings");
-  const name = `${payload?.name || ""}`.trim();
-  const category = `${payload?.category || ""}`.trim().toLowerCase();
-  const unit = `${payload?.unit || ""}`.trim().toLowerCase();
-  const description = `${payload?.description || ""}`.trim();
-  const price = Number(payload?.price || 0);
-  const reorderLevel = Number(payload?.reorderLevel || 0);
+  const values = normalizeCreateProductPayload(payload);
+  const name = values.name;
+  const category = values.category;
+  const unit = values.unit;
+  const description = values.description;
+  const price = values.price;
+  const reorderLevel = values.reorderLevel;
+  const productIcon = values.productIcon;
   const sku = buildProductSku(category, name);
 
   if (!name || !unit) {
@@ -66,6 +78,8 @@ export async function createProductAction(payload) {
 
   const config = getServerAppwriteConfig();
   const databases = createServerDatabases();
+  const storage = createServerStorage();
+  let uploadedImage = null;
 
   try {
     const duplicateBySku = await databases.listDocuments(
@@ -95,17 +109,34 @@ export async function createProductAction(payload) {
     }
 
     const createdAt = new Date().toISOString();
-    const productId = ID.unique();
+    const requestedProductId = ID.unique();
+    const uploadedFile = await uploadProductIconIfProvided(storage, productIcon);
+    uploadedImage = uploadedFile
+      ? {
+          bucketId: PRODUCT_IMAGES_BUCKET_ID,
+          fileId: uploadedFile.$id,
+          alt: name,
+        }
+      : null;
 
-    await databases.createDocument(config.databaseId, COLLECTIONS.products, productId, {
-      name,
-      sku,
-      category,
-      unit,
-      status: ACTIVE_STATUS,
-      selling_price: Number(price.toFixed(2)),
-      description,
-    });
+    const productDocument = await databases.createDocument(
+      config.databaseId,
+      COLLECTIONS.products,
+      requestedProductId,
+      {
+        name,
+        sku,
+        category,
+        unit,
+        status: ACTIVE_STATUS,
+        selling_price: Number(price.toFixed(2)),
+        description,
+        image_bucket_id: uploadedImage?.bucketId || "",
+        image_file_id: uploadedImage?.fileId || "",
+        image_alt: uploadedImage?.alt || "",
+      },
+    );
+    const productId = productDocument.$id;
 
     await databases.createDocument(
       config.databaseId,
@@ -150,6 +181,10 @@ export async function createProductAction(payload) {
       productId,
     };
   } catch (error) {
+    if (uploadedImage?.fileId) {
+      await storage.deleteFile(PRODUCT_IMAGES_BUCKET_ID, uploadedImage.fileId).catch(() => {});
+    }
+
     return {
       success: false,
       message: getUserFacingErrorMessage(error, {
@@ -410,6 +445,75 @@ function createServerDatabases() {
     .setProject(config.projectId);
   client.headers["X-Appwrite-Key"] = config.apiKey;
   return new Databases(client);
+}
+
+function createServerStorage() {
+  const config = getServerAppwriteConfig();
+  const client = new Client()
+    .setEndpoint(config.apiBaseUrl)
+    .setProject(config.projectId);
+  client.headers["X-Appwrite-Key"] = config.apiKey;
+  return new Storage(client);
+}
+
+function normalizeCreateProductPayload(payload) {
+  const isFormDataPayload =
+    typeof FormData !== "undefined" && payload instanceof FormData;
+  const getValue = (key) =>
+    isFormDataPayload ? payload.get(key) : payload?.[key];
+
+  return {
+    name: `${getValue("name") || ""}`.trim(),
+    category: `${getValue("category") || ""}`.trim().toLowerCase(),
+    unit: `${getValue("unit") || ""}`.trim().toLowerCase(),
+    description: `${getValue("description") || ""}`.trim(),
+    price: Number(getValue("price") || 0),
+    reorderLevel: Number(getValue("reorderLevel") || 0),
+    productIcon: isFormDataPayload ? getValue("productIcon") : null,
+  };
+}
+
+async function uploadProductIconIfProvided(storage, productIcon) {
+  if (!isValidUploadFile(productIcon)) {
+    return null;
+  }
+
+  validateProductIcon(productIcon);
+
+  return storage.createFile(
+    PRODUCT_IMAGES_BUCKET_ID,
+    ID.unique(),
+    productIcon,
+  );
+}
+
+function isValidUploadFile(value) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      typeof value.size === "number" &&
+      value.size > 0 &&
+      typeof value.name === "string",
+  );
+}
+
+function validateProductIcon(productIcon) {
+  const fileType = `${productIcon.type || ""}`.trim().toLowerCase();
+  const fileExtension = `${productIcon.name || ""}`
+    .split(".")
+    .pop()
+    ?.toLowerCase();
+
+  if (productIcon.size > PRODUCT_ICON_MAX_SIZE_BYTES) {
+    throw new Error("Product icon must be 5MB or smaller.");
+  }
+
+  if (
+    !VALID_PRODUCT_ICON_TYPES.has(fileType) &&
+    !VALID_PRODUCT_ICON_EXTENSIONS.has(fileExtension)
+  ) {
+    throw new Error("Product icon must be a PNG, JPG, WEBP, or SVG file.");
+  }
 }
 
 async function listAllDocuments(databases, databaseId, collectionId, extraQueries = []) {

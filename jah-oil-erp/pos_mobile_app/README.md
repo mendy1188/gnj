@@ -22,6 +22,7 @@ If omitted, the app will try to derive the web app host from the current Expo de
 - Web ERP mobile auth endpoints under `web_app/src/app/api/mobile`
 - Same user, role, module, and must-change-password workflow as the web app
 - Offline-first queued POS sync with persistent device storage
+- Product images are loaded from Appwrite Storage through the web POS bootstrap API and prefetched into the native image cache. Bundled product icon assets are intentionally not included; lightweight emoji placeholders are used only when a product has no uploaded image.
 
 ## Run
 

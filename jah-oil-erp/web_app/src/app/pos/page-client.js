@@ -591,7 +591,17 @@ function getProductOrder(productName) {
   return 99;
 }
 
-function ProductIcon({ icon, className = "h-10 w-10" }) {
+function ProductIcon({ icon, product, className = "h-10 w-10" }) {
+  if (product?.imageUrl) {
+    return (
+      <img
+        src={product.imageUrl}
+        alt={product.imageAlt || product.name || "Product"}
+        className={className}
+      />
+    );
+  }
+
   if (icon === "rice-50") {
     return (
       <Image
@@ -766,6 +776,8 @@ export default function PosPageClient({
         unit: product.unit || "unit",
         category: product.category || "shop",
         icon: getProductIconKey(product.name),
+        imageUrl: product.imageUrl || "",
+        imageAlt: product.imageAlt || product.name || "",
         accent: "from-slate-50 to-white",
       }))
       .sort(
@@ -1341,6 +1353,7 @@ export default function PosPageClient({
                     <div className="flex h-24 w-24 items-center justify-center rounded-[1.25rem] bg-sky-50/80">
                       <ProductIcon
                         icon={product.icon}
+                        product={product}
                         className="h-16 w-16 object-contain"
                       />
                     </div>

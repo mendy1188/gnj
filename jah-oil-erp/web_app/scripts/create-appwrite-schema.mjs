@@ -13,6 +13,8 @@ import {
 
 const ATTRIBUTE_READY_STATES = new Set(["available", "ready"]);
 const ATTRIBUTE_FAILED_STATES = new Set(["failed", "stuck"]);
+const PRODUCT_IMAGES_BUCKET_ID =
+  process.env.APPWRITE_PRODUCT_IMAGES_BUCKET_ID || "product-images";
 
 loadEnvFiles();
 
@@ -59,6 +61,9 @@ const schema = [
       enumAttribute("status", ["active", "inactive"]),
       floatAttribute("selling_price", { required: false }),
       stringAttribute("description", 1000, { required: false }),
+      stringAttribute("image_bucket_id", 64, { required: false }),
+      stringAttribute("image_file_id", 128, { required: false }),
+      stringAttribute("image_alt", 255, { required: false }),
     ],
     indexes: [
       uniqueIndex("products_sku_unique", ["sku"]),
@@ -958,6 +963,21 @@ const schema = [
   },
 ];
 
+const storageBuckets = [
+  {
+    id: PRODUCT_IMAGES_BUCKET_ID,
+    name: "Product Images",
+    permissions: ['read("any")'],
+    fileSecurity: false,
+    enabled: true,
+    maximumFileSize: 5 * 1024 * 1024,
+    allowedFileExtensions: ["png", "jpg", "jpeg", "webp", "svg"],
+    compression: "gzip",
+    encryption: true,
+    antivirus: true,
+  },
+];
+
 main().catch((error) => {
   console.error(`Schema creation failed: ${error.message}`);
 
@@ -977,7 +997,14 @@ async function main() {
     schema.forEach((collection) => {
       console.log(`- ${collection.id}: ${collection.attributes.length} attributes, ${collection.indexes.length} indexes`);
     });
+    storageBuckets.forEach((bucket) => {
+      console.log(`- storage bucket ${bucket.id}: ${bucket.name}`);
+    });
     return;
+  }
+
+  for (const bucket of storageBuckets) {
+    await ensureBucket(bucket);
   }
 
   for (const collection of schema) {
@@ -995,6 +1022,34 @@ async function main() {
   }
 
   console.log("Appwrite schema is ready.");
+}
+
+async function ensureBucket(bucket) {
+  try {
+    await request(config, "/storage/buckets", {
+      method: "POST",
+      body: {
+        bucketId: bucket.id,
+        name: bucket.name,
+        permissions: bucket.permissions,
+        fileSecurity: bucket.fileSecurity,
+        enabled: bucket.enabled,
+        maximumFileSize: bucket.maximumFileSize,
+        allowedFileExtensions: bucket.allowedFileExtensions,
+        compression: bucket.compression,
+        encryption: bucket.encryption,
+        antivirus: bucket.antivirus,
+      },
+    });
+    console.log(`Created storage bucket: ${bucket.id}`);
+  } catch (error) {
+    if (isAlreadyExistsError(error)) {
+      console.log(`Storage bucket already exists: ${bucket.id}`);
+      return;
+    }
+
+    throw error;
+  }
 }
 
 function printUsage() {
