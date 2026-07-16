@@ -556,7 +556,7 @@ export default function ProductSettingsPageClient({
                       className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 file:mr-3 file:cursor-pointer file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
                     />
                     <p className="mt-1 text-xs text-slate-500">
-                      PNG, JPG, WEBP, or SVG. Max 5MB. Stored in Appwrite Storage.
+                      PNG, JPG, WEBP, or SVG. Max 5MB.
                     </p>
                   </div>
                   <CompactActionButton
