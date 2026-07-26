@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -27,10 +28,7 @@ import {
   PRIMARY_ACTION_BUTTON_CLASS,
 } from "@/features/operations/ui";
 
-import {
-  saveManagedBalanceAction,
-  settleCreditBalanceAction,
-} from "./actions";
+import { saveManagedBalanceAction, settleCreditBalanceAction } from "./actions";
 
 const DEFAULT_ACCOUNT_FORM = {
   customerName: "",
@@ -228,9 +226,36 @@ function isCreditAccountOverdue(account, todayDateString) {
   return dueDate < todayDateString;
 }
 
+function parseCreditAddressNotes(notes) {
+  const addresses = {
+    physicalAddress: "",
+    digitalAddress: "",
+  };
+
+  for (const line of `${notes || ""}`.split(/\r?\n/)) {
+    const normalizedLine = line.trim();
+
+    if (normalizedLine.startsWith("Physical address:")) {
+      addresses.physicalAddress = normalizedLine
+        .slice("Physical address:".length)
+        .trim();
+    } else if (normalizedLine.startsWith("Digital address:")) {
+      addresses.digitalAddress = normalizedLine
+        .slice("Digital address:".length)
+        .trim();
+    }
+  }
+
+  return addresses;
+}
+
 function buildSummaryCards(accounts, activeView) {
-  const activeAccounts = accounts.filter((account) => account.status === "active");
-  const overdueAccounts = accounts.filter((account) => account.isOverdue).length;
+  const activeAccounts = accounts.filter(
+    (account) => account.status === "active",
+  );
+  const overdueAccounts = accounts.filter(
+    (account) => account.isOverdue,
+  ).length;
   const totalBalance = accounts.reduce(
     (sum, account) => sum + Number(account.balanceAmount || 0),
     0,
@@ -251,7 +276,8 @@ function buildSummaryCards(accounts, activeView) {
       icon: activeView === "credit" ? "💰" : "🏦",
     },
     {
-      title: activeView === "credit" ? "Active / Overdue" : "Active / Suspended",
+      title:
+        activeView === "credit" ? "Active / Overdue" : "Active / Suspended",
       value:
         activeView === "credit"
           ? `${formatNumber(activeAccounts.length)} / ${formatNumber(overdueAccounts)}`
@@ -261,11 +287,7 @@ function buildSummaryCards(accounts, activeView) {
   ];
 }
 
-function buildDetailCards(
-  account,
-  nextPaymentDate = "",
-  creditSaleAmount = 0,
-) {
+function buildDetailCards(account, nextPaymentDate = "", creditSaleAmount = 0) {
   if (!account) {
     return [];
   }
@@ -372,17 +394,28 @@ export default function BalanceManagementPageClient({
     () =>
       balanceAccounts.map((account) => {
         const isOverdue = isCreditAccountOverdue(account, todayDateString);
+        const addresses = parseCreditAddressNotes(account.notes);
         const derivedProductName =
-          account.productName || movementProductNamesByAccountId.get(account.id) || "";
+          account.productName ||
+          movementProductNamesByAccountId.get(account.id) ||
+          "";
 
         return {
           ...account,
+          physicalAddress: account.physicalAddress || addresses.physicalAddress,
+          digitalAddress: account.digitalAddress || addresses.digitalAddress,
           isOverdue,
           accountTypeLabel: formatAccountTypeLabel(account.accountType),
-          productCategoryLabel: formatProductCategoryLabel(account.productCategory),
+          productCategoryLabel: formatProductCategoryLabel(
+            account.productCategory,
+          ),
           productDisplayLabel: derivedProductName || "—",
-          statusLabel: isOverdue ? "Overdue" : formatStatusLabel(account.status),
-          updatedAtLabel: formatDisplayDateTime(account.updatedAt || account.createdAt),
+          statusLabel: isOverdue
+            ? "Overdue"
+            : formatStatusLabel(account.status),
+          updatedAtLabel: formatDisplayDateTime(
+            account.updatedAt || account.createdAt,
+          ),
           stationNameLabel: account.stationName || "All stations",
         };
       }),
@@ -414,7 +447,10 @@ export default function BalanceManagementPageClient({
         return false;
       }
 
-      if (categoryFilter !== "All" && account.productCategory !== categoryFilter) {
+      if (
+        categoryFilter !== "All" &&
+        account.productCategory !== categoryFilter
+      ) {
         return false;
       }
 
@@ -425,6 +461,8 @@ export default function BalanceManagementPageClient({
       return [
         account.customerName,
         account.customerPhone,
+        account.physicalAddress,
+        account.digitalAddress,
         account.referenceCode,
         account.stationName,
         account.productName,
@@ -459,18 +497,16 @@ export default function BalanceManagementPageClient({
             : "—",
           actorNameLabel: record.actorName || "System",
           notesLabel:
-            record.notes ||
-            record.receiptNumber ||
-            record.referenceCode ||
-            "—",
+            record.notes || record.receiptNumber || record.referenceCode || "—",
         })),
     [movementRecords, selectedAccountId],
   );
 
   const latestMovementDueDate = useMemo(
     () =>
-      selectedAccountMovements.find((record) => `${record.dueDate || ""}`.trim())
-        ?.dueDate || "",
+      selectedAccountMovements.find((record) =>
+        `${record.dueDate || ""}`.trim(),
+      )?.dueDate || "",
     [selectedAccountMovements],
   );
 
@@ -478,7 +514,10 @@ export default function BalanceManagementPageClient({
     () =>
       selectedAccountMovements
         .filter((record) => record.direction === "credit")
-        .reduce((sum, record) => sum + Math.abs(Number(record.amountDelta || 0)), 0),
+        .reduce(
+          (sum, record) => sum + Math.abs(Number(record.amountDelta || 0)),
+          0,
+        ),
     [selectedAccountMovements],
   );
 
@@ -574,9 +613,11 @@ export default function BalanceManagementPageClient({
 
     startTransition(async () => {
       const stationRecord =
-        stations.find((station) => station.id === accountForm.stationId) || null;
+        stations.find((station) => station.id === accountForm.stationId) ||
+        null;
       const productRecord =
-        products.find((product) => product.id === accountForm.productId) || null;
+        products.find((product) => product.id === accountForm.productId) ||
+        null;
       const result = await saveManagedBalanceAction({
         accountId: isCreatingNewAccount ? "" : selectedAccount?.id || "",
         accountType: activeView,
@@ -636,7 +677,9 @@ export default function BalanceManagementPageClient({
   const pageTitle =
     activeView === "bulk_redeem" ? "Bulk Balances" : "Credit Accounts";
   const settlementAmountValue = Number(settlementForm.amount || 0);
-  const selectedOutstandingBalance = Number(selectedAccount?.balanceAmount || 0);
+  const selectedOutstandingBalance = Number(
+    selectedAccount?.balanceAmount || 0,
+  );
   const requiresNextPaymentDate =
     selectedAccount &&
     Number.isFinite(settlementAmountValue) &&
@@ -656,7 +699,7 @@ export default function BalanceManagementPageClient({
             {canManageBalances ? (
               <CompactActionButton
                 onClick={startNewAccount}
-                className={`px-4 py-2 text-sm shadow-lg shadow-sky-500/25 ring-1 ring-sky-400/30 ${PRIMARY_ACTION_BUTTON_CLASS}`}
+                className={`px-4 py-2 text-sm shadow-lg ring-1 shadow-sky-500/25 ring-sky-400/30 ${PRIMARY_ACTION_BUTTON_CLASS}`}
               >
                 New bulk balance
               </CompactActionButton>
@@ -681,7 +724,9 @@ export default function BalanceManagementPageClient({
           />
         </div>
         <div>
-          <CompactFieldLabel htmlFor="balanceStationFilter">station</CompactFieldLabel>
+          <CompactFieldLabel htmlFor="balanceStationFilter">
+            station
+          </CompactFieldLabel>
           <CompactSelect
             id="balanceStationFilter"
             value={stationFilter}
@@ -699,7 +744,9 @@ export default function BalanceManagementPageClient({
           </CompactSelect>
         </div>
         <div>
-          <CompactFieldLabel htmlFor="balanceStatusFilter">status</CompactFieldLabel>
+          <CompactFieldLabel htmlFor="balanceStatusFilter">
+            status
+          </CompactFieldLabel>
           <CompactSelect
             id="balanceStatusFilter"
             value={statusFilter}
@@ -716,7 +763,9 @@ export default function BalanceManagementPageClient({
           </CompactSelect>
         </div>
         <div>
-          <CompactFieldLabel htmlFor="balanceCategoryFilter">category</CompactFieldLabel>
+          <CompactFieldLabel htmlFor="balanceCategoryFilter">
+            category
+          </CompactFieldLabel>
           <CompactSelect
             id="balanceCategoryFilter"
             value={categoryFilter}
@@ -770,7 +819,9 @@ export default function BalanceManagementPageClient({
               currentPage={accountsPage}
               totalItems={filteredAccounts.length}
               pageSize={PAGE_SIZE}
-              label={activeView === "credit" ? "credit accounts" : "balance accounts"}
+              label={
+                activeView === "credit" ? "credit accounts" : "balance accounts"
+              }
             />
             <PaginationControls
               currentPage={accountsPage}
@@ -783,7 +834,35 @@ export default function BalanceManagementPageClient({
         right={
           <div className="space-y-4">
             {selectedAccount ? (
-              <CompactSummaryCards items={detailCards} fullRow />
+              <div className="space-y-3">
+                <CompactSummaryCards items={detailCards} fullRow />
+                <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <Link
+                    href={`/balance-management/${selectedAccount.id}/guarantor`}
+                    className="inline-flex rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                  >
+                    Guarantor
+                  </Link>
+                  <Link
+                    href={`/balance-management/${selectedAccount.id}/agreement`}
+                    className="inline-flex rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                  >
+                    Agreement
+                  </Link>
+                  <Link
+                    href={`/balance-management/${selectedAccount.id}/documents`}
+                    className="inline-flex rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                  >
+                    Documents
+                  </Link>
+                  <Link
+                    href={`/balance-management/${selectedAccount.id}/follow-ups`}
+                    className="inline-flex rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                  >
+                    Follow-ups
+                  </Link>
+                </div>
+              </div>
             ) : null}
 
             {canManageBalances ? (
@@ -847,8 +926,9 @@ export default function BalanceManagementPageClient({
                       value={accountForm.stationId}
                       onChange={(event) => {
                         const stationRecord =
-                          stations.find((station) => station.id === event.target.value) ||
-                          null;
+                          stations.find(
+                            (station) => station.id === event.target.value,
+                          ) || null;
                         setAccountForm((current) => ({
                           ...current,
                           stationId: event.target.value,
@@ -878,7 +958,9 @@ export default function BalanceManagementPageClient({
                             ...current,
                             productId: event.target.value,
                             productName: productRecord?.name || "",
-                            productCategory: productRecord?.category || current.productCategory,
+                            productCategory:
+                              productRecord?.category ||
+                              current.productCategory,
                           }));
                         }}
                       >
@@ -896,7 +978,10 @@ export default function BalanceManagementPageClient({
                       <CompactSelect
                         value={accountForm.productCategory}
                         onChange={(event) =>
-                          updateAccountForm("productCategory", event.target.value)
+                          updateAccountForm(
+                            "productCategory",
+                            event.target.value,
+                          )
                         }
                       >
                         <option value="all">All Products</option>
@@ -948,7 +1033,9 @@ export default function BalanceManagementPageClient({
                     <CompactFieldLabel>notes</CompactFieldLabel>
                     <CompactInput
                       value={accountForm.notes}
-                      onChange={(event) => updateAccountForm("notes", event.target.value)}
+                      onChange={(event) =>
+                        updateAccountForm("notes", event.target.value)
+                      }
                       placeholder="Internal notes for this balance"
                     />
                   </div>
@@ -958,7 +1045,7 @@ export default function BalanceManagementPageClient({
                   <CompactActionButton
                     onClick={handleSaveManagedBalance}
                     disabled={isPending}
-                    className={`px-4 py-2 text-sm shadow-lg shadow-sky-500/25 ring-1 ring-sky-400/30 ${PRIMARY_ACTION_BUTTON_CLASS}`}
+                    className={`px-4 py-2 text-sm shadow-lg ring-1 shadow-sky-500/25 ring-sky-400/30 ${PRIMARY_ACTION_BUTTON_CLASS}`}
                   >
                     {isPending
                       ? "Saving..."
@@ -986,13 +1073,20 @@ export default function BalanceManagementPageClient({
                   <div className="mt-5 space-y-4">
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <p className="text-sm font-semibold text-slate-900">
-                        {selectedAccount.customerName}
+                        {selectedAccount.customerName ||
+                          "Creditor not recorded"}
+                        <span className="mx-2 text-slate-300">|</span>
+                        <span className="font-medium text-slate-600">
+                          {selectedAccount.customerPhone ||
+                            "Phone not recorded"}
+                        </span>
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {selectedAccount.customerPhone}
-                        {selectedAccount.stationName
-                          ? ` · ${selectedAccount.stationName}`
-                          : ""}
+                        {selectedAccount.physicalAddress ||
+                          "Physical address not recorded"}
+                        <span className="mx-2 text-slate-300">|</span>
+                        {selectedAccount.digitalAddress ||
+                          "Digital address not recorded"}
                       </p>
                     </div>
 
@@ -1014,7 +1108,9 @@ export default function BalanceManagementPageClient({
                         />
                       </div>
                       <div>
-                        <CompactFieldLabel>current outstanding</CompactFieldLabel>
+                        <CompactFieldLabel>
+                          current outstanding
+                        </CompactFieldLabel>
                         <CompactInput
                           value={formatCurrency(selectedAccount.balanceAmount)}
                           disabled
@@ -1022,7 +1118,9 @@ export default function BalanceManagementPageClient({
                       </div>
                       {requiresNextPaymentDate ? (
                         <div>
-                          <CompactFieldLabel>next payment date</CompactFieldLabel>
+                          <CompactFieldLabel>
+                            next payment date
+                          </CompactFieldLabel>
                           <CompactInput
                             type="date"
                             value={settlementForm.nextPaymentDate}
@@ -1054,7 +1152,7 @@ export default function BalanceManagementPageClient({
                       <CompactActionButton
                         onClick={handleSettleCredit}
                         disabled={isPending}
-                        className={`px-4 py-2 text-sm shadow-lg shadow-sky-500/25 ring-1 ring-sky-400/30 ${PRIMARY_ACTION_BUTTON_CLASS}`}
+                        className={`px-4 py-2 text-sm shadow-lg ring-1 shadow-sky-500/25 ring-sky-400/30 ${PRIMARY_ACTION_BUTTON_CLASS}`}
                       >
                         {isPending ? "Saving..." : "Record settlement"}
                       </CompactActionButton>
@@ -1065,7 +1163,8 @@ export default function BalanceManagementPageClient({
                   </div>
                 ) : (
                   <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                    Select a credit account from the table to record a settlement.
+                    Select a credit account from the table to record a
+                    settlement.
                   </div>
                 )}
               </div>

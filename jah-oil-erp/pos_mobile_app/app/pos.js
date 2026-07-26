@@ -51,11 +51,7 @@ function formatCurrency(value) {
 
 function prefetchProductImages(products = []) {
   const imageUrls = [
-    ...new Set(
-      products
-        .map((product) => `${product?.imageUrl || ""}`.trim())
-        .filter(Boolean),
-    ),
+    ...new Set(products.map((product) => `${product?.imageUrl || ""}`.trim()).filter(Boolean)),
   ];
 
   imageUrls.forEach((imageUrl) => {
@@ -107,9 +103,7 @@ function parseCurrencyInput(value) {
 }
 
 function normalizeTwoDecimalInput(value) {
-  const normalizedValue = `${value || ""}`
-    .replace(/,/g, ".")
-    .replace(/[^\d.]/g, "");
+  const normalizedValue = `${value || ""}`.replace(/,/g, ".").replace(/[^\d.]/g, "");
 
   if (!normalizedValue) {
     return "";
@@ -281,18 +275,13 @@ function buildQueuedReversalToastMessage(syncMessage) {
 }
 
 function getQueuedEntryTypeLabel(entry) {
-  return `${entry?.syncAction || ""}`.trim().toLowerCase() === "sale_reverse"
-    ? "Reversal"
-    : "Sale";
+  return `${entry?.syncAction || ""}`.trim().toLowerCase() === "sale_reverse" ? "Reversal" : "Sale";
 }
 
 function getQueuedReversalReceiptIds(queuedSales = []) {
   return new Set(
     (Array.isArray(queuedSales) ? queuedSales : [])
-      .filter(
-        (entry) =>
-          `${entry?.syncAction || ""}`.trim().toLowerCase() === "sale_reverse",
-      )
+      .filter((entry) => `${entry?.syncAction || ""}`.trim().toLowerCase() === "sale_reverse")
       .map((entry) => `${entry?.receiptNumber || ""}`.trim() || `${entry?.id || ""}`.trim())
       .filter(Boolean),
   );
@@ -327,9 +316,7 @@ function removeReceiptFromSummary(summary, receiptNumber, amount) {
 }
 
 function removeQueuedReversalTransactions(summary, queuedReceiptNumbers) {
-  const queuedIds = queuedReceiptNumbers instanceof Set
-    ? queuedReceiptNumbers
-    : new Set();
+  const queuedIds = queuedReceiptNumbers instanceof Set ? queuedReceiptNumbers : new Set();
 
   return (Array.isArray(summary?.records) ? summary.records : []).reduce(
     (currentSummary, record) => {
@@ -339,11 +326,7 @@ function removeQueuedReversalTransactions(summary, queuedReceiptNumbers) {
         return currentSummary;
       }
 
-      return removeReceiptFromSummary(
-        currentSummary,
-        receiptNumber,
-        Number(record?.amount || 0),
-      );
+      return removeReceiptFromSummary(currentSummary, receiptNumber, Number(record?.amount || 0));
     },
     summary,
   );
@@ -498,20 +481,18 @@ export default function PosScreen() {
   }, [bootstrap]);
 
   const stations = bootstrap?.stations || [];
-  const paymentMethods = bootstrap?.paymentMethods || [];
+  const paymentMethods = (bootstrap?.paymentMethods || []).filter(
+    (method) => `${method?.code || ""}`.trim().toLowerCase() !== "credit",
+  );
   const canSelectStation = isPrivilegedRole(session?.roleName);
   const isFuelSalesCashier = isFuelSalesRole(session?.roleName);
   const isCashierLocked = !canSelectStation;
   const hasPosAccess = session?.modules?.includes("pos");
-  const activeStation =
-    stations.find((station) => station.id === stationId) || stations[0] || null;
+  const activeStation = stations.find((station) => station.id === stationId) || stations[0] || null;
   const currentStationName =
     `${activeStation?.name || session?.branchName || ""}`.trim() || "Assigned station";
-  const currentCashierName =
-    `${cashierName || session?.fullName || ""}`.trim() || "POS Counter";
-  const syncIconColor = syncStatus.isOnline
-    ? styles.$palette.success
-    : styles.$palette.warning;
+  const currentCashierName = `${cashierName || session?.fullName || ""}`.trim() || "POS Counter";
+  const syncIconColor = syncStatus.isOnline ? styles.$palette.success : styles.$palette.warning;
   const todayDate = useMemo(() => getTodayDateString(), []);
   const subtotal = useMemo(
     () => cart.reduce((total, item) => total + getCartItemLineTotal(item), 0),
@@ -556,8 +537,7 @@ export default function PosScreen() {
       return Boolean(
         normalizedFuelGiftCode &&
           appliedFuelGift?.code &&
-          normalizeFuelGiftLookupCode(appliedFuelGift.code) ===
-            normalizedFuelGiftCode,
+          normalizeFuelGiftLookupCode(appliedFuelGift.code) === normalizedFuelGiftCode,
       );
     }
 
@@ -608,13 +588,7 @@ export default function PosScreen() {
         cashierName: currentCashierName,
       },
     });
-  }, [
-    activeStation?.id,
-    currentCashierName,
-    currentStationName,
-    stationId,
-    token,
-  ]);
+  }, [activeStation?.id, currentCashierName, currentStationName, stationId, token]);
 
   const loadBootstrap = useCallback(
     async ({ silent = false } = {}) => {
@@ -650,9 +624,7 @@ export default function PosScreen() {
             "Showing cached POS data. New sales still queue locally and will sync later.",
           );
         } else {
-          setBootstrapError(
-            getUserFacingErrorMessage(error, { context: "bootstrap" }),
-          );
+          setBootstrapError(getUserFacingErrorMessage(error, { context: "bootstrap" }));
         }
       } finally {
         setIsLoadingBootstrap(false);
@@ -747,8 +719,7 @@ export default function PosScreen() {
 
   function openDatePicker(target) {
     const currentValue =
-      (target === "credit_due_date" ? parseDateInputValue(creditDueDate) : null) ||
-      new Date();
+      (target === "credit_due_date" ? parseDateInputValue(creditDueDate) : null) || new Date();
     setDatePickerValue(currentValue);
     setActiveDatePicker(target);
   }
@@ -837,9 +808,7 @@ export default function PosScreen() {
       });
 
       if (!matchedProduct) {
-        throw new Error(
-          "This cashier cannot sell the fuel product linked to that gift code.",
-        );
+        throw new Error("This cashier cannot sell the fuel product linked to that gift code.");
       }
 
       setAppliedFuelGift(gift);
@@ -926,9 +895,7 @@ export default function PosScreen() {
           return;
         }
 
-        setCashierDaySummaryError(
-          getUserFacingErrorMessage(error, { context: "transactions" }),
-        );
+        setCashierDaySummaryError(getUserFacingErrorMessage(error, { context: "transactions" }));
       } finally {
         if (isActive) {
           setIsLoadingCashierDaySummary(false);
@@ -1002,8 +969,7 @@ export default function PosScreen() {
       const existingItem = currentCart.find((item) => item.name === product.name);
 
       if (existingItem) {
-        const nextFuelAmount =
-          getCartItemLineTotal(existingItem) + Number(product.price || 0);
+        const nextFuelAmount = getCartItemLineTotal(existingItem) + Number(product.price || 0);
 
         return currentCart.map((item) =>
           item.name === product.name
@@ -1038,9 +1004,7 @@ export default function PosScreen() {
     }
 
     setCart((currentCart) =>
-      currentCart.map((item) =>
-        item.name === productName ? { ...item, qty: quantity } : item,
-      ),
+      currentCart.map((item) => (item.name === productName ? { ...item, qty: quantity } : item)),
     );
   }
 
@@ -1053,9 +1017,7 @@ export default function PosScreen() {
 
     setCart((currentCart) =>
       currentCart.map((item) =>
-        item.name === productName
-          ? { ...item, amountInput: normalizedAmountInput }
-          : item,
+        item.name === productName ? { ...item, amountInput: normalizedAmountInput } : item,
       ),
     );
   }
@@ -1065,9 +1027,7 @@ export default function PosScreen() {
       return;
     }
 
-    setCart((currentCart) =>
-      currentCart.filter((item) => item.name !== productName),
-    );
+    setCart((currentCart) => currentCart.filter((item) => item.name !== productName));
   }
 
   async function handleCompleteSale() {
@@ -1102,9 +1062,7 @@ export default function PosScreen() {
         unit: item.unit,
         price: item.price,
         qty: getCartItemQuantity(item),
-        amount: isFuelCategory(item.category)
-          ? getCartItemLineTotal(item)
-          : undefined,
+        amount: isFuelCategory(item.category) ? getCartItemLineTotal(item) : undefined,
       }));
       const salePayload = {
         stationId,
@@ -1141,9 +1099,7 @@ export default function PosScreen() {
         });
 
         if (!syncResult?.success) {
-          throw new Error(
-            syncResult?.message || "Fuel gift sale could not be completed.",
-          );
+          throw new Error(syncResult?.message || "Fuel gift sale could not be completed.");
         }
 
         setCart([]);
@@ -1363,9 +1319,7 @@ export default function PosScreen() {
       ) : null}
 
       <ScrollView
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-        }
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
         contentContainerStyle={styles.scrollContent}
         stickyHeaderIndices={[0]}
         showsVerticalScrollIndicator={false}
@@ -1385,10 +1339,7 @@ export default function PosScreen() {
                     syncStatus.isOnline ? styles.syncButtonOnline : styles.syncButtonOffline,
                   ]}
                 >
-                  <SyncIcon
-                    color={syncIconColor}
-                    isSyncing={syncStatus.isSyncing}
-                  />
+                  <SyncIcon color={syncIconColor} isSyncing={syncStatus.isSyncing} />
                   <View
                     style={[
                       styles.syncButtonStatusDot,
@@ -1398,10 +1349,7 @@ export default function PosScreen() {
                     ]}
                   />
                 </Pressable>
-                <Pressable
-                  onPress={handleOpenTransactionsPanel}
-                  style={styles.iconActionButton}
-                >
+                <Pressable onPress={handleOpenTransactionsPanel} style={styles.iconActionButton}>
                   <Text style={styles.iconActionText}>🧾</Text>
                 </Pressable>
                 <Pressable
@@ -1438,23 +1386,15 @@ export default function PosScreen() {
           ) : (
             <>
               <View
-                style={[
-                  styles.primaryPanels,
-                  isTabletOrLarger ? styles.primaryPanelsTablet : null,
-                ]}
+                style={[styles.primaryPanels, isTabletOrLarger ? styles.primaryPanelsTablet : null]}
               >
                 <InfoCard
-                  style={[
-                    styles.catalogCard,
-                    isTabletOrLarger ? styles.catalogCardTablet : null,
-                  ]}
+                  style={[styles.catalogCard, isTabletOrLarger ? styles.catalogCardTablet : null]}
                 >
                   <View style={styles.sectionHeader}>
                     <Text style={styles.sectionEyebrow}>Product Catalog</Text>
                     {/* <Text style={styles.sectionTitle}>Available Products</Text> */}
-                    <Text style={styles.sectionDescription}>
-                      Tap a product to select it.
-                    </Text>
+                    <Text style={styles.sectionDescription}>Tap a product to select it.</Text>
                   </View>
 
                   {catalogProducts.length === 0 ? (
@@ -1462,8 +1402,8 @@ export default function PosScreen() {
                       <Text style={styles.emptyCartIcon}>📦</Text>
                       <Text style={styles.emptyCartTitle}>No POS catalog loaded</Text>
                       <Text style={styles.emptyCartDescription}>
-                        Connect once to load your assigned stations, products, and payment
-                        methods before selling offline.
+                        Connect once to load your assigned stations, products, and payment methods
+                        before selling offline.
                       </Text>
                     </View>
                   ) : (
@@ -1553,7 +1493,7 @@ export default function PosScreen() {
                     isTabletOrLarger ? styles.checkoutCardTablet : null,
                   ]}
                 >
-              {/* <View style={styles.checkoutHeader}>
+                  {/* <View style={styles.checkoutHeader}>
                 <View style={styles.checkoutCopy}>
                   <Text style={styles.checkoutEyebrow}>Checkout</Text>
                   <Text style={styles.checkoutTitle}>Order Summary</Text>
@@ -1566,356 +1506,321 @@ export default function PosScreen() {
                 </View>
               </View> */}
 
-              {canSelectStation ? (
-                <View style={styles.fieldSection}>
-                  <Text style={styles.fieldLabel}>Station</Text>
-                  <View style={styles.chipRow}>
-                    {stations.map((station) => (
-                      <Pressable
-                        key={station.id}
-                        onPress={() => setStationId(station.id)}
+                  {canSelectStation ? (
+                    <View style={styles.fieldSection}>
+                      <Text style={styles.fieldLabel}>Station</Text>
+                      <View style={styles.chipRow}>
+                        {stations.map((station) => (
+                          <Pressable
+                            key={station.id}
+                            onPress={() => setStationId(station.id)}
+                            style={[
+                              styles.selectionChip,
+                              isMobilePhone ? styles.selectionChipPhone : null,
+                              station.id === stationId ? styles.selectionChipActive : null,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.selectionChipText,
+                                isMobilePhone ? styles.selectionChipTextPhone : null,
+                                station.id === stationId ? styles.selectionChipTextActive : null,
+                              ]}
+                            >
+                              {station.name}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.fieldSection}>
+                    <Text style={styles.sectionEyebrow}>Sale Summary</Text>
+                    <Text
                       style={[
-                        styles.selectionChip,
-                        isMobilePhone ? styles.selectionChipPhone : null,
-                        station.id === stationId ? styles.selectionChipActive : null,
+                        styles.sectionDescription,
+                        isMobilePhone ? styles.sectionDescriptionPhone : null,
                       ]}
                     >
-                        <Text
+                      Select payment, review cart lines, complete sale.
+                    </Text>
+                    <View style={styles.chipRow}>
+                      {paymentMethods.map((method) => (
+                        <Pressable
+                          key={method.code}
+                          onPress={() => setPaymentMethod(method.code)}
                           style={[
-                            styles.selectionChipText,
-                            isMobilePhone ? styles.selectionChipTextPhone : null,
-                            station.id === stationId ? styles.selectionChipTextActive : null,
+                            styles.selectionChip,
+                            isMobilePhone ? styles.selectionChipPhone : null,
+                            method.code === paymentMethod ? styles.selectionChipActive : null,
                           ]}
                         >
-                          {station.name}
+                          <Text
+                            style={[
+                              styles.selectionChipText,
+                              isMobilePhone ? styles.selectionChipTextPhone : null,
+                              method.code === paymentMethod ? styles.selectionChipTextActive : null,
+                            ]}
+                          >
+                            {method.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View style={styles.inputGrid}>
+                    <View style={styles.inputBlock}>
+                      <Text style={styles.fieldLabel}>Customer Name</Text>
+                      <TextInput
+                        value={customerName}
+                        onChangeText={setCustomerName}
+                        editable={!isFuelGiftLocked}
+                        placeholder={
+                          isCouponPaymentMethod(paymentMethod) ||
+                          isCreditPaymentMethod(paymentMethod)
+                            ? "Required"
+                            : "Optional"
+                        }
+                        placeholderTextColor={styles.$palette.placeholder}
+                        style={[
+                          styles.textInput,
+                          isMobilePhone ? styles.textInputPhone : null,
+                          isFuelGiftLocked ? styles.textInputDisabled : null,
+                        ]}
+                      />
+                    </View>
+                    <View style={styles.inputBlock}>
+                      <Text style={styles.fieldLabel}>Phone Number</Text>
+                      <TextInput
+                        value={customerPhone}
+                        onChangeText={setCustomerPhone}
+                        placeholder={
+                          isCouponPaymentMethod(paymentMethod) ||
+                          isCreditPaymentMethod(paymentMethod)
+                            ? "Required"
+                            : "Optional"
+                        }
+                        placeholderTextColor={styles.$palette.placeholder}
+                        keyboardType="phone-pad"
+                        style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                      />
+                    </View>
+                  </View>
+
+                  {isCouponPaymentMethod(paymentMethod) ? (
+                    <View style={styles.inputGrid}>
+                      <View style={styles.inputBlock}>
+                        <Text style={styles.fieldLabel}>Coupon Code</Text>
+                        <TextInput
+                          value={couponCode}
+                          onChangeText={setCouponCode}
+                          placeholder="Required"
+                          placeholderTextColor={styles.$palette.placeholder}
+                          style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                        />
+                      </View>
+                      {hasFuelItemsInCart ? (
+                        <View style={styles.inputBlock}>
+                          <Text style={styles.fieldLabel}>Vehicle Registration</Text>
+                          <TextInput
+                            value={vehicleRegistrationNumber}
+                            onChangeText={setVehicleRegistrationNumber}
+                            placeholder="Required for fuel"
+                            placeholderTextColor={styles.$palette.placeholder}
+                            style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                          />
+                        </View>
+                      ) : null}
+                      <View style={styles.inputBlock}>
+                        <Text style={styles.fieldLabel}>Company / Organization</Text>
+                        <TextInput
+                          value={companyOrOrganizationName}
+                          onChangeText={setCompanyOrOrganizationName}
+                          placeholder="Required"
+                          placeholderTextColor={styles.$palette.placeholder}
+                          style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                        />
+                      </View>
+                      <View style={styles.inputBlock}>
+                        <Text style={styles.fieldLabel}>Note</Text>
+                        <TextInput
+                          value={paymentNote}
+                          onChangeText={setPaymentNote}
+                          placeholder="Optional"
+                          placeholderTextColor={styles.$palette.placeholder}
+                          style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {isCreditPaymentMethod(paymentMethod) ? (
+                    <View style={styles.inputGrid}>
+                      <View style={styles.inputBlock}>
+                        <Text style={styles.fieldLabel}>Credit Due Date</Text>
+                        <Pressable
+                          onPress={() => openDatePicker("credit_due_date")}
+                          style={[
+                            styles.textInput,
+                            styles.dateFieldButton,
+                            isMobilePhone ? styles.textInputPhone : null,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.dateFieldText,
+                              !creditDueDate ? styles.dateFieldPlaceholder : null,
+                            ]}
+                          >
+                            {creditDueDate ? formatDisplayDate(creditDueDate) : "Select due date"}
+                          </Text>
+                        </Pressable>
+                        {creditDueDate ? (
+                          <Pressable
+                            onPress={() => setCreditDueDate("")}
+                            style={styles.dateFieldActionButton}
+                          >
+                            <Text style={styles.dateFieldActionText}>Clear date</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                      {hasFuelItemsInCart ? (
+                        <View style={styles.inputBlock}>
+                          <Text style={styles.fieldLabel}>Vehicle Registration</Text>
+                          <TextInput
+                            value={vehicleRegistrationNumber}
+                            onChangeText={setVehicleRegistrationNumber}
+                            placeholder="Required for fuel"
+                            placeholderTextColor={styles.$palette.placeholder}
+                            style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                          />
+                        </View>
+                      ) : null}
+                      <View style={styles.inputBlock}>
+                        <Text style={styles.fieldLabel}>Billable To</Text>
+                        <TextInput
+                          value={billableTo}
+                          onChangeText={setBillableTo}
+                          placeholder="Required"
+                          placeholderTextColor={styles.$palette.placeholder}
+                          style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                        />
+                      </View>
+                      <View style={styles.inputBlock}>
+                        <Text style={styles.fieldLabel}>Note</Text>
+                        <TextInput
+                          value={paymentNote}
+                          onChangeText={setPaymentNote}
+                          placeholder="Optional"
+                          placeholderTextColor={styles.$palette.placeholder}
+                          style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {isBulkRedeemPaymentMethod(paymentMethod) ? (
+                    <View style={styles.inputGrid}>
+                      <View style={styles.inputBlock}>
+                        <Text style={styles.fieldLabel}>Bulk Reference</Text>
+                        <TextInput
+                          value={bulkReferenceCode}
+                          onChangeText={setBulkReferenceCode}
+                          placeholder="Required"
+                          placeholderTextColor={styles.$palette.placeholder}
+                          style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                        />
+                      </View>
+                      <View style={styles.inputBlock}>
+                        <Text style={styles.fieldLabel}>Note</Text>
+                        <TextInput
+                          value={paymentNote}
+                          onChangeText={setPaymentNote}
+                          placeholder="Optional"
+                          placeholderTextColor={styles.$palette.placeholder}
+                          style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {isFuelGiftPaymentMethod(paymentMethod) ? (
+                    <View style={styles.inputGrid}>
+                      <View style={styles.inputBlock}>
+                        <Text style={styles.fieldLabel}>Fuel Gift Code</Text>
+                        <TextInput
+                          value={fuelGiftCode}
+                          onChangeText={(value) => {
+                            setFuelGiftCode(value.toUpperCase());
+                            setCart([]);
+                            setCustomerName("");
+                            setCustomerPhone("");
+                            setAppliedFuelGift(null);
+                          }}
+                          placeholder="Required"
+                          placeholderTextColor={styles.$palette.placeholder}
+                          autoCapitalize="characters"
+                          style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                        />
+                      </View>
+                      <View style={styles.inputBlock}>
+                        <Text style={styles.fieldLabel}>Note</Text>
+                        <TextInput
+                          value={paymentNote}
+                          onChangeText={setPaymentNote}
+                          placeholder="Optional"
+                          placeholderTextColor={styles.$palette.placeholder}
+                          style={[styles.textInput, isMobilePhone ? styles.textInputPhone : null]}
+                        />
+                      </View>
+                      <View style={styles.inlineActionRow}>
+                        <Pressable
+                          onPress={() => void handleApplyFuelGiftCode()}
+                          disabled={isApplyingFuelGift || !normalizedFuelGiftCode}
+                          style={[
+                            styles.inlinePrimaryButton,
+                            isApplyingFuelGift || !normalizedFuelGiftCode
+                              ? styles.primaryButtonDisabled
+                              : null,
+                          ]}
+                        >
+                          <Text style={styles.inlinePrimaryButtonText}>
+                            {isApplyingFuelGift ? "Applying..." : "Apply Gift Code"}
+                          </Text>
+                        </Pressable>
+                        {appliedFuelGift ? (
+                          <Pressable
+                            onPress={handleClearFuelGift}
+                            style={styles.inlineSecondaryButton}
+                          >
+                            <Text style={styles.inlineSecondaryButtonText}>Clear Gift</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                      {appliedFuelGift ? (
+                        <View style={styles.appliedGiftCard}>
+                          <Text style={styles.appliedGiftTitle}>
+                            Gift ready: {appliedFuelGift.productName} ·{" "}
+                            {formatCurrency(appliedFuelGift.amount)}
+                          </Text>
+                          <Text style={styles.appliedGiftMeta}>
+                            Recipient: {appliedFuelGift.recipientName || "Recipient"} · Code:{" "}
+                            {appliedFuelGift.code}
+                          </Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.infoHintCard}>
+                        <Text style={styles.infoHintText}>
+                          Fuel gift redemptions must match the assigned fuel product and the exact
+                          gift value.
                         </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              ) : null}
-
-              <View style={styles.fieldSection}>
-                <Text style={styles.sectionEyebrow}>Sale Summary</Text>
-                <Text
-                  style={[
-                    styles.sectionDescription,
-                    isMobilePhone ? styles.sectionDescriptionPhone : null,
-                  ]}
-                >
-                    Select payment, review cart lines, complete sale.
-                </Text>
-                <View style={styles.chipRow}>
-                  {paymentMethods.map((method) => (
-                    <Pressable
-                      key={method.code}
-                      onPress={() => setPaymentMethod(method.code)}
-                      style={[
-                        styles.selectionChip,
-                        isMobilePhone ? styles.selectionChipPhone : null,
-                        method.code === paymentMethod ? styles.selectionChipActive : null,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.selectionChipText,
-                          isMobilePhone ? styles.selectionChipTextPhone : null,
-                          method.code === paymentMethod ? styles.selectionChipTextActive : null,
-                        ]}
-                      >
-                        {method.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.inputGrid}>
-                <View style={styles.inputBlock}>
-                  <Text style={styles.fieldLabel}>Customer Name</Text>
-                  <TextInput
-                    value={customerName}
-                    onChangeText={setCustomerName}
-                    editable={!isFuelGiftLocked}
-                    placeholder={
-                      isCouponPaymentMethod(paymentMethod) ||
-                      isCreditPaymentMethod(paymentMethod)
-                        ? "Required"
-                        : "Optional"
-                    }
-                    placeholderTextColor={styles.$palette.placeholder}
-                    style={[
-                      styles.textInput,
-                      isMobilePhone ? styles.textInputPhone : null,
-                      isFuelGiftLocked ? styles.textInputDisabled : null,
-                    ]}
-                  />
-                </View>
-                <View style={styles.inputBlock}>
-                  <Text style={styles.fieldLabel}>Phone Number</Text>
-                  <TextInput
-                    value={customerPhone}
-                    onChangeText={setCustomerPhone}
-                    placeholder={
-                      isCouponPaymentMethod(paymentMethod) ||
-                      isCreditPaymentMethod(paymentMethod)
-                        ? "Required"
-                        : "Optional"
-                    }
-                    placeholderTextColor={styles.$palette.placeholder}
-                    keyboardType="phone-pad"
-                    style={[
-                      styles.textInput,
-                      isMobilePhone ? styles.textInputPhone : null,
-                    ]}
-                  />
-                </View>
-              </View>
-
-              {isCouponPaymentMethod(paymentMethod) ? (
-                <View style={styles.inputGrid}>
-                  <View style={styles.inputBlock}>
-                    <Text style={styles.fieldLabel}>Coupon Code</Text>
-                    <TextInput
-                      value={couponCode}
-                      onChangeText={setCouponCode}
-                      placeholder="Required"
-                      placeholderTextColor={styles.$palette.placeholder}
-                      style={[
-                        styles.textInput,
-                        isMobilePhone ? styles.textInputPhone : null,
-                      ]}
-                    />
-                  </View>
-                  {hasFuelItemsInCart ? (
-                    <View style={styles.inputBlock}>
-                      <Text style={styles.fieldLabel}>Vehicle Registration</Text>
-                      <TextInput
-                        value={vehicleRegistrationNumber}
-                        onChangeText={setVehicleRegistrationNumber}
-                        placeholder="Required for fuel"
-                        placeholderTextColor={styles.$palette.placeholder}
-                        style={[
-                          styles.textInput,
-                          isMobilePhone ? styles.textInputPhone : null,
-                        ]}
-                      />
+                      </View>
                     </View>
                   ) : null}
-                  <View style={styles.inputBlock}>
-                    <Text style={styles.fieldLabel}>Company / Organization</Text>
-                    <TextInput
-                      value={companyOrOrganizationName}
-                      onChangeText={setCompanyOrOrganizationName}
-                      placeholder="Required"
-                      placeholderTextColor={styles.$palette.placeholder}
-                      style={[
-                        styles.textInput,
-                        isMobilePhone ? styles.textInputPhone : null,
-                      ]}
-                    />
-                  </View>
-                  <View style={styles.inputBlock}>
-                    <Text style={styles.fieldLabel}>Note</Text>
-                    <TextInput
-                      value={paymentNote}
-                      onChangeText={setPaymentNote}
-                      placeholder="Optional"
-                      placeholderTextColor={styles.$palette.placeholder}
-                      style={[
-                        styles.textInput,
-                        isMobilePhone ? styles.textInputPhone : null,
-                      ]}
-                    />
-                  </View>
-                </View>
-              ) : null}
 
-              {isCreditPaymentMethod(paymentMethod) ? (
-                <View style={styles.inputGrid}>
-                  <View style={styles.inputBlock}>
-                    <Text style={styles.fieldLabel}>Credit Due Date</Text>
-                    <Pressable
-                      onPress={() => openDatePicker("credit_due_date")}
-                      style={[
-                        styles.textInput,
-                        styles.dateFieldButton,
-                        isMobilePhone ? styles.textInputPhone : null,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.dateFieldText,
-                          !creditDueDate ? styles.dateFieldPlaceholder : null,
-                        ]}
-                      >
-                        {creditDueDate ? formatDisplayDate(creditDueDate) : "Select due date"}
-                      </Text>
-                    </Pressable>
-                    {creditDueDate ? (
-                      <Pressable
-                        onPress={() => setCreditDueDate("")}
-                        style={styles.dateFieldActionButton}
-                      >
-                        <Text style={styles.dateFieldActionText}>Clear date</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                  {hasFuelItemsInCart ? (
-                    <View style={styles.inputBlock}>
-                      <Text style={styles.fieldLabel}>Vehicle Registration</Text>
-                      <TextInput
-                        value={vehicleRegistrationNumber}
-                        onChangeText={setVehicleRegistrationNumber}
-                        placeholder="Required for fuel"
-                        placeholderTextColor={styles.$palette.placeholder}
-                        style={[
-                          styles.textInput,
-                          isMobilePhone ? styles.textInputPhone : null,
-                        ]}
-                      />
-                    </View>
-                  ) : null}
-                  <View style={styles.inputBlock}>
-                    <Text style={styles.fieldLabel}>Billable To</Text>
-                    <TextInput
-                      value={billableTo}
-                      onChangeText={setBillableTo}
-                      placeholder="Required"
-                      placeholderTextColor={styles.$palette.placeholder}
-                      style={[
-                        styles.textInput,
-                        isMobilePhone ? styles.textInputPhone : null,
-                      ]}
-                    />
-                  </View>
-                  <View style={styles.inputBlock}>
-                    <Text style={styles.fieldLabel}>Note</Text>
-                    <TextInput
-                      value={paymentNote}
-                      onChangeText={setPaymentNote}
-                      placeholder="Optional"
-                      placeholderTextColor={styles.$palette.placeholder}
-                      style={[
-                        styles.textInput,
-                        isMobilePhone ? styles.textInputPhone : null,
-                      ]}
-                    />
-                  </View>
-                </View>
-              ) : null}
-
-              {isBulkRedeemPaymentMethod(paymentMethod) ? (
-                <View style={styles.inputGrid}>
-                  <View style={styles.inputBlock}>
-                    <Text style={styles.fieldLabel}>Bulk Reference</Text>
-                    <TextInput
-                      value={bulkReferenceCode}
-                      onChangeText={setBulkReferenceCode}
-                      placeholder="Required"
-                      placeholderTextColor={styles.$palette.placeholder}
-                      style={[
-                        styles.textInput,
-                        isMobilePhone ? styles.textInputPhone : null,
-                      ]}
-                    />
-                  </View>
-                  <View style={styles.inputBlock}>
-                    <Text style={styles.fieldLabel}>Note</Text>
-                    <TextInput
-                      value={paymentNote}
-                      onChangeText={setPaymentNote}
-                      placeholder="Optional"
-                      placeholderTextColor={styles.$palette.placeholder}
-                      style={[
-                        styles.textInput,
-                        isMobilePhone ? styles.textInputPhone : null,
-                      ]}
-                    />
-                  </View>
-                </View>
-              ) : null}
-
-              {isFuelGiftPaymentMethod(paymentMethod) ? (
-                <View style={styles.inputGrid}>
-                  <View style={styles.inputBlock}>
-                    <Text style={styles.fieldLabel}>Fuel Gift Code</Text>
-                    <TextInput
-                      value={fuelGiftCode}
-                      onChangeText={(value) => {
-                        setFuelGiftCode(value.toUpperCase());
-                        setCart([]);
-                        setCustomerName("");
-                        setCustomerPhone("");
-                        setAppliedFuelGift(null);
-                      }}
-                      placeholder="Required"
-                      placeholderTextColor={styles.$palette.placeholder}
-                      autoCapitalize="characters"
-                      style={[
-                        styles.textInput,
-                        isMobilePhone ? styles.textInputPhone : null,
-                      ]}
-                    />
-                  </View>
-                  <View style={styles.inputBlock}>
-                    <Text style={styles.fieldLabel}>Note</Text>
-                    <TextInput
-                      value={paymentNote}
-                      onChangeText={setPaymentNote}
-                      placeholder="Optional"
-                      placeholderTextColor={styles.$palette.placeholder}
-                      style={[
-                        styles.textInput,
-                        isMobilePhone ? styles.textInputPhone : null,
-                      ]}
-                    />
-                  </View>
-                  <View style={styles.inlineActionRow}>
-                    <Pressable
-                      onPress={() => void handleApplyFuelGiftCode()}
-                      disabled={isApplyingFuelGift || !normalizedFuelGiftCode}
-                      style={[
-                        styles.inlinePrimaryButton,
-                        isApplyingFuelGift || !normalizedFuelGiftCode
-                          ? styles.primaryButtonDisabled
-                          : null,
-                      ]}
-                    >
-                      <Text style={styles.inlinePrimaryButtonText}>
-                        {isApplyingFuelGift ? "Applying..." : "Apply Gift Code"}
-                      </Text>
-                    </Pressable>
-                    {appliedFuelGift ? (
-                      <Pressable
-                        onPress={handleClearFuelGift}
-                        style={styles.inlineSecondaryButton}
-                      >
-                        <Text style={styles.inlineSecondaryButtonText}>Clear Gift</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                  {appliedFuelGift ? (
-                    <View style={styles.appliedGiftCard}>
-                      <Text style={styles.appliedGiftTitle}>
-                        Gift ready: {appliedFuelGift.productName} ·{" "}
-                        {formatCurrency(appliedFuelGift.amount)}
-                      </Text>
-                      <Text style={styles.appliedGiftMeta}>
-                        Recipient: {appliedFuelGift.recipientName || "Recipient"} · Code:{" "}
-                        {appliedFuelGift.code}
-                      </Text>
-                    </View>
-                  ) : null}
-                  <View style={styles.infoHintCard}>
-                    <Text style={styles.infoHintText}>
-                      Fuel gift redemptions must match the assigned fuel product and the exact gift value.
-                    </Text>
-                  </View>
-                </View>
-              ) : null}
-
-              {/* <View style={styles.inputBlock}>
+                  {/* <View style={styles.inputBlock}>
                 <Text style={styles.fieldLabel}>Cashier</Text>
                 <TextInput
                   value={cashierName}
@@ -1929,246 +1834,243 @@ export default function PosScreen() {
                 />
               </View> */}
 
-              {cart.length === 0 ? (
-                <View style={[styles.emptyCart, isMobilePhone ? styles.emptyCartPhone : null]}>
-                  <Text
-                    style={[
-                      styles.emptyCartIcon,
-                      isMobilePhone ? styles.emptyCartIconPhone : null,
-                    ]}
-                  >
-                    {checkoutEmptyStateIcon}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.emptyCartTitle,
-                      isMobilePhone ? styles.emptyCartTitlePhone : null,
-                    ]}
-                  >
-                    No products added
-                  </Text>
-                  <Text
-                    style={[
-                      styles.emptyCartDescription,
-                      isMobilePhone ? styles.emptyCartDescriptionPhone : null,
-                    ]}
-                  >
-                    Add items from the product catalog to build a sale.
-                  </Text>
-                </View>
-              ) : (
-                <>
-                  <View style={styles.cartList}>
-                    {cart.map((item) => (
-                      <View
-                        key={item.name}
-                        style={[styles.cartItem, isMobilePhone ? styles.cartItemPhone : null]}
+                  {cart.length === 0 ? (
+                    <View style={[styles.emptyCart, isMobilePhone ? styles.emptyCartPhone : null]}>
+                      <Text
+                        style={[
+                          styles.emptyCartIcon,
+                          isMobilePhone ? styles.emptyCartIconPhone : null,
+                        ]}
                       >
-                        <View style={styles.cartItemHeader}>
-                          <View style={styles.cartItemCopy}>
-                            <Text
-                              style={[
-                                styles.cartItemName,
-                                isMobilePhone ? styles.cartItemNamePhone : null,
-                              ]}
-                            >
-                              {item.name}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.cartItemMeta,
-                                isMobilePhone ? styles.cartItemMetaPhone : null,
-                              ]}
-                            >
-                              {formatCurrency(item.price)} per {item.unit}
-                            </Text>
-                          </View>
-                          <Pressable
-                            onPress={() => removeFromCart(item.name)}
-                            style={styles.removeChip}
+                        {checkoutEmptyStateIcon}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.emptyCartTitle,
+                          isMobilePhone ? styles.emptyCartTitlePhone : null,
+                        ]}
+                      >
+                        No products added
+                      </Text>
+                      <Text
+                        style={[
+                          styles.emptyCartDescription,
+                          isMobilePhone ? styles.emptyCartDescriptionPhone : null,
+                        ]}
+                      >
+                        Add items from the product catalog to build a sale.
+                      </Text>
+                    </View>
+                  ) : (
+                    <>
+                      <View style={styles.cartList}>
+                        {cart.map((item) => (
+                          <View
+                            key={item.name}
+                            style={[styles.cartItem, isMobilePhone ? styles.cartItemPhone : null]}
                           >
-                            <Text style={styles.removeChipText}>✕</Text>
-                          </Pressable>
-                        </View>
-
-                        <View style={styles.cartItemRow}>
-                          {isFuelCategory(item.category) ? (
-                            <View>
-                              <Text style={styles.fieldLabel}>Amount</Text>
-                              <TextInput
-                                value={item.amountInput ?? ""}
-                                onChangeText={(value) => updateFuelAmount(item.name, value)}
-                                keyboardType="numeric"
-                                style={[
-                                  styles.textInput,
-                                  isMobilePhone ? styles.textInputPhone : null,
-                                  styles.smallInput,
-                                  isMobilePhone ? styles.smallInputPhone : null,
-                                  styles.textInputFuel,
-                                ]}
-                                placeholderTextColor={styles.$palette.placeholder}
-                              />
-                              <Text
-                                style={[
-                                  styles.helperLabel,
-                                  isMobilePhone ? styles.helperLabelPhone : null,
-                                  styles.helperLabelInput,
-                                  isMobilePhone ? styles.helperLabelInputPhone : null,
-                                ]}
+                            <View style={styles.cartItemHeader}>
+                              <View style={styles.cartItemCopy}>
+                                <Text
+                                  style={[
+                                    styles.cartItemName,
+                                    isMobilePhone ? styles.cartItemNamePhone : null,
+                                  ]}
+                                >
+                                  {item.name}
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.cartItemMeta,
+                                    isMobilePhone ? styles.cartItemMetaPhone : null,
+                                  ]}
+                                >
+                                  {formatCurrency(item.price)} per {item.unit}
+                                </Text>
+                              </View>
+                              <Pressable
+                                onPress={() => removeFromCart(item.name)}
+                                style={styles.removeChip}
                               >
-                                {formatFuelQuantity(
-                                  getFuelQuantityFromAmount(
-                                    item.amountInput ?? item.amount,
-                                    item.price,
-                                  ),
-                                )}{" "}
-                                litres
-                              </Text>
+                                <Text style={styles.removeChipText}>✕</Text>
+                              </Pressable>
                             </View>
-                          ) : (
-                            <View>
-                              <Text style={styles.fieldLabel}>Qty</Text>
-                              <TextInput
-                                value={String(item.qty)}
-                                onChangeText={(value) =>
-                                  updateQty(item.name, Number.parseInt(value, 10))
-                                }
-                                keyboardType="numeric"
-                                style={[
-                                  styles.textInput,
-                                  isMobilePhone ? styles.textInputPhone : null,
-                                  styles.smallInput,
-                                  isMobilePhone ? styles.smallInputPhone : null,
-                                ]}
-                                placeholderTextColor={styles.$palette.placeholder}
-                              />
+
+                            <View style={styles.cartItemRow}>
+                              {isFuelCategory(item.category) ? (
+                                <View>
+                                  <Text style={styles.fieldLabel}>Amount</Text>
+                                  <TextInput
+                                    value={item.amountInput ?? ""}
+                                    onChangeText={(value) => updateFuelAmount(item.name, value)}
+                                    keyboardType="numeric"
+                                    style={[
+                                      styles.textInput,
+                                      isMobilePhone ? styles.textInputPhone : null,
+                                      styles.smallInput,
+                                      isMobilePhone ? styles.smallInputPhone : null,
+                                      styles.textInputFuel,
+                                    ]}
+                                    placeholderTextColor={styles.$palette.placeholder}
+                                  />
+                                  <Text
+                                    style={[
+                                      styles.helperLabel,
+                                      isMobilePhone ? styles.helperLabelPhone : null,
+                                      styles.helperLabelInput,
+                                      isMobilePhone ? styles.helperLabelInputPhone : null,
+                                    ]}
+                                  >
+                                    {formatFuelQuantity(
+                                      getFuelQuantityFromAmount(
+                                        item.amountInput ?? item.amount,
+                                        item.price,
+                                      ),
+                                    )}{" "}
+                                    litres
+                                  </Text>
+                                </View>
+                              ) : (
+                                <View>
+                                  <Text style={styles.fieldLabel}>Qty</Text>
+                                  <TextInput
+                                    value={String(item.qty)}
+                                    onChangeText={(value) =>
+                                      updateQty(item.name, Number.parseInt(value, 10))
+                                    }
+                                    keyboardType="numeric"
+                                    style={[
+                                      styles.textInput,
+                                      isMobilePhone ? styles.textInputPhone : null,
+                                      styles.smallInput,
+                                      isMobilePhone ? styles.smallInputPhone : null,
+                                    ]}
+                                    placeholderTextColor={styles.$palette.placeholder}
+                                  />
+                                </View>
+                              )}
+                              <View style={styles.lineTotalWrap}>
+                                <Text
+                                  style={[
+                                    styles.lineTotalLabel,
+                                    isMobilePhone ? styles.lineTotalLabelPhone : null,
+                                  ]}
+                                >
+                                  Line Total
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.lineTotalValue,
+                                    isMobilePhone ? styles.lineTotalValuePhone : null,
+                                  ]}
+                                >
+                                  {formatCurrency(getCartItemLineTotal(item))}
+                                </Text>
+                              </View>
                             </View>
-                          )}
-                          <View style={styles.lineTotalWrap}>
-                            <Text
-                              style={[
-                                styles.lineTotalLabel,
-                                isMobilePhone ? styles.lineTotalLabelPhone : null,
-                              ]}
-                            >
-                              Line Total
-                            </Text>
-                            <Text
-                              style={[
-                                styles.lineTotalValue,
-                                isMobilePhone ? styles.lineTotalValuePhone : null,
-                              ]}
-                            >
-                              {formatCurrency(getCartItemLineTotal(item))}
-                            </Text>
                           </View>
+                        ))}
+                      </View>
+
+                      <View
+                        style={[styles.totalPanel, isMobilePhone ? styles.totalPanelPhone : null]}
+                      >
+                        <View style={styles.totalRow}>
+                          <Text
+                            style={[
+                              styles.totalLabel,
+                              isMobilePhone ? styles.totalLabelPhone : null,
+                            ]}
+                          >
+                            Subtotal
+                          </Text>
+                          <Text
+                            style={[
+                              styles.totalValueSmall,
+                              isMobilePhone ? styles.totalValueSmallPhone : null,
+                            ]}
+                          >
+                            {formatCurrency(subtotal)}
+                          </Text>
+                        </View>
+                        <View style={styles.totalDivider} />
+                        <View style={styles.totalRow}>
+                          <Text
+                            style={[
+                              styles.totalLabelStrong,
+                              isMobilePhone ? styles.totalLabelPhone : null,
+                            ]}
+                          >
+                            Total
+                          </Text>
+                          <Text
+                            style={[
+                              styles.totalValue,
+                              isMobilePhone ? styles.totalValuePhone : null,
+                            ]}
+                          >
+                            {formatCurrency(total)}
+                          </Text>
                         </View>
                       </View>
-                    ))}
-                  </View>
 
-                  <View
-                    style={[styles.totalPanel, isMobilePhone ? styles.totalPanelPhone : null]}
-                  >
-                    <View style={styles.totalRow}>
+                      <View style={[styles.printRow, isMobilePhone ? styles.printRowPhone : null]}>
+                        <Text
+                          style={[styles.printLabel, isMobilePhone ? styles.printLabelPhone : null]}
+                        >
+                          Print receipt after sale
+                        </Text>
+                        <Switch
+                          value={shouldPrintReceipt}
+                          onValueChange={setShouldPrintReceipt}
+                          trackColor={{
+                            false: palette.switchTrackOff,
+                            true: palette.primary,
+                          }}
+                          thumbColor={palette.switchThumb}
+                        />
+                      </View>
+
                       <Text
+                        style={[styles.offlineHint, isMobilePhone ? styles.offlineHintPhone : null]}
+                      >
+                        {syncStatus.isOnline
+                          ? "POS is online. Sales sync immediately when the request succeeds."
+                          : "POS is offline. Sales save on this device first and sync automatically later."}
+                      </Text>
+
+                      <Pressable
+                        onPress={handleCompleteSale}
+                        disabled={
+                          isSubmitting ||
+                          cart.length === 0 ||
+                          !stationId ||
+                          !paymentMethod ||
+                          !isPaymentContextValid
+                        }
                         style={[
-                          styles.totalLabel,
-                          isMobilePhone ? styles.totalLabelPhone : null,
+                          styles.primaryButton,
+                          isMobilePhone ? styles.primaryButtonPhone : null,
+                          isSubmitting ||
+                          cart.length === 0 ||
+                          !stationId ||
+                          !paymentMethod ||
+                          !isPaymentContextValid
+                            ? styles.primaryButtonDisabled
+                            : null,
                         ]}
                       >
-                        Subtotal
-                      </Text>
-                      <Text
-                        style={[
-                          styles.totalValueSmall,
-                          isMobilePhone ? styles.totalValueSmallPhone : null,
-                        ]}
-                      >
-                        {formatCurrency(subtotal)}
-                      </Text>
-                    </View>
-                    <View style={styles.totalDivider} />
-                    <View style={styles.totalRow}>
-                      <Text
-                        style={[
-                          styles.totalLabelStrong,
-                          isMobilePhone ? styles.totalLabelPhone : null,
-                        ]}
-                      >
-                        Total
-                      </Text>
-                      <Text
-                        style={[
-                          styles.totalValue,
-                          isMobilePhone ? styles.totalValuePhone : null,
-                        ]}
-                      >
-                        {formatCurrency(total)}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={[styles.printRow, isMobilePhone ? styles.printRowPhone : null]}>
-                    <Text
-                      style={[
-                        styles.printLabel,
-                        isMobilePhone ? styles.printLabelPhone : null,
-                      ]}
-                    >
-                      Print receipt after sale
-                    </Text>
-                    <Switch
-                      value={shouldPrintReceipt}
-                      onValueChange={setShouldPrintReceipt}
-                      trackColor={{ false: palette.switchTrackOff, true: palette.primary }}
-                      thumbColor={palette.switchThumb}
-                    />
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.offlineHint,
-                      isMobilePhone ? styles.offlineHintPhone : null,
-                    ]}
-                  >
-                    {syncStatus.isOnline
-                      ? "POS is online. Sales sync immediately when the request succeeds."
-                      : "POS is offline. Sales save on this device first and sync automatically later."}
-                  </Text>
-
-                  <Pressable
-                    onPress={handleCompleteSale}
-                    disabled={
-                      isSubmitting ||
-                      cart.length === 0 ||
-                      !stationId ||
-                      !paymentMethod ||
-                      !isPaymentContextValid
-                    }
-                    style={[
-                      styles.primaryButton,
-                      isMobilePhone ? styles.primaryButtonPhone : null,
-                      isSubmitting ||
-                      cart.length === 0 ||
-                      !stationId ||
-                      !paymentMethod ||
-                      !isPaymentContextValid
-                        ? styles.primaryButtonDisabled
-                        : null,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.primaryButtonText,
-                        isMobilePhone ? styles.primaryButtonTextPhone : null,
-                      ]}
-                    >
-                      {isSubmitting ? "Saving..." : "Complete Sale"}
-                    </Text>
-                  </Pressable>
-                </>
-              )}
+                        <Text
+                          style={[
+                            styles.primaryButtonText,
+                            isMobilePhone ? styles.primaryButtonTextPhone : null,
+                          ]}
+                        >
+                          {isSubmitting ? "Saving..." : "Complete Sale"}
+                        </Text>
+                      </Pressable>
+                    </>
+                  )}
                 </InfoCard>
               </View>
             </>
@@ -2228,7 +2130,10 @@ export default function PosScreen() {
                     <Switch
                       value={isDark}
                       onValueChange={toggleMode}
-                      trackColor={{ false: palette.switchTrackOff, true: palette.primary }}
+                      trackColor={{
+                        false: palette.switchTrackOff,
+                        true: palette.primary,
+                      }}
                       thumbColor={palette.switchThumb}
                     />
                   </View>
@@ -2279,18 +2184,14 @@ export default function PosScreen() {
             >
               <View style={styles.settingsSection}>
                 <View style={styles.settingsSectionHeader}>
-                  <Text style={styles.settingsSectionTitle}>
-                    {currentCashierName}
-                  </Text>
+                  <Text style={styles.settingsSectionTitle}>{currentCashierName}</Text>
                   <Text style={styles.settingsSectionMeta}>
                     {formatDisplayDate(cashierDaySummary.date || todayDate)}
                   </Text>
                 </View>
 
                 {isLoadingCashierDaySummary ? (
-                  <Text style={styles.settingsSectionHint}>
-                    Loading transactions…
-                  </Text>
+                  <Text style={styles.settingsSectionHint}>Loading transactions…</Text>
                 ) : cashierDaySummaryError ? (
                   <View style={styles.errorBanner}>
                     <Text style={styles.errorText}>{cashierDaySummaryError}</Text>
@@ -2398,8 +2299,8 @@ export default function PosScreen() {
                             <Text style={styles.paginationButtonText}>Previous</Text>
                           </Pressable>
                           <Text style={styles.paginationMeta}>
-                            Page {transactionsPage} · {transactionRangeStart}-{transactionRangeEnd} of{" "}
-                            {cashierDaySummary.totalTransactions.toLocaleString()}
+                            Page {transactionsPage} · {transactionRangeStart}-{transactionRangeEnd}{" "}
+                            of {cashierDaySummary.totalTransactions.toLocaleString()}
                           </Text>
                           <Pressable
                             onPress={handleNextTransactionsPage}
@@ -2439,17 +2340,15 @@ export default function PosScreen() {
                   Pending sales are stored locally first and synced to the HQ system when possible.
                 </Text>
               </View>
-              <Pressable
-                onPress={() => setIsSyncPanelOpen(false)}
-                style={styles.modalCloseButton}
-              >
+              <Pressable onPress={() => setIsSyncPanelOpen(false)} style={styles.modalCloseButton}>
                 <Text style={styles.modalClose}>✕</Text>
               </Pressable>
             </View>
 
             <View style={styles.syncStatsRow}>
               <Text style={styles.syncStatText}>
-                {syncPanel.queuedSales.length} queued · Last synced {formatLastSyncedAt(syncStatus.lastSyncedAt)}
+                {syncPanel.queuedSales.length} queued · Last synced{" "}
+                {formatLastSyncedAt(syncStatus.lastSyncedAt)}
               </Text>
               <Text
                 style={[
@@ -2465,10 +2364,7 @@ export default function PosScreen() {
               <Pressable onPress={handleRetrySync} style={styles.secondaryAction}>
                 <Text style={styles.secondaryActionText}>Retry Sync</Text>
               </Pressable>
-              <Pressable
-                onPress={handleClearResolvedEntries}
-                style={styles.secondaryAction}
-              >
+              <Pressable onPress={handleClearResolvedEntries} style={styles.secondaryAction}>
                 <Text style={styles.secondaryActionText}>Clear Synced</Text>
               </Pressable>
             </View>
@@ -2503,7 +2399,8 @@ export default function PosScreen() {
                         </Pressable>
                       </View>
                       <Text style={styles.syncEntryMeta}>
-                        {entry.cashierName || "POS Counter"} · {formatLastSyncedAt(entry.saleDate || entry.queuedAt)}
+                        {entry.cashierName || "POS Counter"} ·{" "}
+                        {formatLastSyncedAt(entry.saleDate || entry.queuedAt)}
                       </Text>
                       {entry.receiptNumber ? (
                         <Text style={styles.syncEntryMeta}>{entry.receiptNumber}</Text>
@@ -3222,8 +3119,7 @@ const createStyles = (palette) => {
       borderRadius: 16,
       borderWidth: 1,
       borderColor: palette.success,
-      backgroundColor:
-        palette.mode === "dark" ? "rgba(34, 197, 94, 0.12)" : "#ecfdf5",
+      backgroundColor: palette.mode === "dark" ? "rgba(34, 197, 94, 0.12)" : "#ecfdf5",
       paddingHorizontal: 14,
       paddingVertical: 12,
       gap: 6,
@@ -3275,7 +3171,7 @@ const createStyles = (palette) => {
     },
     textInputFuel: {
       fontSize: 18,
-      fontWeight: '600',
+      fontWeight: "600",
     },
     textInputDisabled: {
       opacity: 0.65,

@@ -117,6 +117,22 @@ const NAVIGATION_DEFINITIONS = [
   { type: "module", key: "coupons" },
   { type: "module", key: "bulk-fuel-purchases" },
   { type: "module", key: "pos" },
+  {
+    type: "group",
+    key: "credit-debt-management",
+    label: "Credit / Debt Management",
+    icon: "bank",
+    children: [
+      {
+        key: "credit-sale",
+        label: "Credit Sale",
+        href: "/credit-sale",
+        icon: "cart",
+        accessKey: "pos",
+      },
+      "balance-management",
+    ],
+  },
   { type: "module", key: "reports" },
   {
     type: "group",
@@ -131,7 +147,6 @@ const NAVIGATION_DEFINITIONS = [
       "rewards-management",
       "coupon-purchases",
       "bulk-fuel-purchase-settings",
-      "balance-management",
       "reverse-transactions",
       "pos-envelopes",
       "admin",
@@ -222,9 +237,14 @@ function getProtectedRouteKeys() {
 }
 
 function getModuleForPath(pathname) {
+  if (pathname === "/credit-sale" || pathname.startsWith("/credit-sale/")) {
+    return "pos";
+  }
+
   return (
     MODULE_DEFINITIONS.find(
-      (module) => pathname === module.href || pathname.startsWith(`${module.href}/`),
+      (module) =>
+        pathname === module.href || pathname.startsWith(`${module.href}/`),
     )?.key || null
   );
 }
@@ -306,17 +326,23 @@ function getUserInitials(name = "") {
 
 function buildNavigationItems(allowedModuleKeys = []) {
   const allowedModules = new Set(allowedModuleKeys);
-  const moduleMap = new Map(MODULE_DEFINITIONS.map((module) => [module.key, module]));
+  const moduleMap = new Map(
+    MODULE_DEFINITIONS.map((module) => [module.key, module]),
+  );
 
   return NAVIGATION_DEFINITIONS.flatMap((entry) => {
     if (entry.type === "group") {
       const children = entry.children
-        .map((key) => moduleMap.get(key))
+        .map((child) =>
+          typeof child === "string" ? moduleMap.get(child) : child,
+        )
         .filter(
           (module) =>
             module &&
-            (allowedModules.has(module.key) ||
-              (["notification-settings", "pos-envelopes"].includes(module.key) &&
+            (allowedModules.has(module.accessKey || module.key) ||
+              (["notification-settings", "pos-envelopes"].includes(
+                module.key,
+              ) &&
                 allowedModules.has("admin"))),
         )
         .map(toNavigationItem);
@@ -335,7 +361,9 @@ function buildNavigationItems(allowedModuleKeys = []) {
 
     const module = moduleMap.get(entry.key);
 
-    return module && allowedModules.has(module.key) ? [toNavigationItem(module)] : [];
+    return module && allowedModules.has(module.key)
+      ? [toNavigationItem(module)]
+      : [];
   });
 }
 
@@ -382,7 +410,10 @@ function bytesToBase64Url(bytes) {
     binary += String.fromCharCode(byte);
   });
 
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
 }
 
 function base64UrlToBytes(value) {

@@ -919,6 +919,7 @@ export async function getSalesDataForDateRange(options = {}) {
     cacheNamespace: "sales-range-data",
     useMemoryCache: false,
     includeCashierMetadata: true,
+    includePaymentMetadata: true,
     itemsTimeoutMs: getPositiveInteger(
       process.env.APPWRITE_SALES_ITEMS_TIMEOUT_MS,
       DEFAULT_COLLECTION_TIMEOUT_MS,
@@ -2290,6 +2291,7 @@ function mapSalesItemDocumentToRecord(document, receiptsById = new Map()) {
       receiptMetadata.paymentMethodLabel ||
       receiptMetadata.paymentMethod ||
       "",
+    paymentMethodCode: receiptMetadata.paymentMethodCode || "",
     paymentStatus: receiptMetadata.paymentStatus || "",
     receiptStatus: receiptMetadata.status || "",
     source: receiptMetadata.source || "",
@@ -2640,6 +2642,7 @@ async function getScopedSalesData({
   cashierName = "",
   categories = [],
   includeCashierMetadata = false,
+  includePaymentMetadata = false,
   cacheNamespace = "scoped-sales-data",
   useMemoryCache = true,
   itemsTimeoutMs = getPositiveInteger(
@@ -2676,7 +2679,9 @@ async function getScopedSalesData({
         .filter(Boolean),
     ),
   ).sort();
-  const shouldLoadCashierMetadata = Boolean(includeCashierMetadata);
+  const shouldLoadReceiptMetadata = Boolean(
+    includeCashierMetadata || includePaymentMetadata,
+  );
   const cacheKey = [
     cacheNamespace,
     rangeStart,
@@ -2685,9 +2690,9 @@ async function getScopedSalesData({
     normalizedStationId || "all-stations-by-id",
     normalizedBranchName || "all-branches",
     normalizedCategories.join(",") || "all-categories",
-    shouldLoadCashierMetadata
+    shouldLoadReceiptMetadata
       ? normalizedCashierName || "all-cashiers"
-      : "no-cashier",
+      : "no-receipt-metadata",
   ].join(":");
 
   const loadSalesData = async () => {
@@ -2729,7 +2734,7 @@ async function getScopedSalesData({
       },
     );
 
-    const receiptsPromise = shouldLoadCashierMetadata
+    const receiptsPromise = shouldLoadReceiptMetadata
       ? queryCollectionDocuments(COLLECTIONS.salesReceipts, {
           pageLimit,
           timeoutMs: receiptsTimeoutMs,
@@ -2758,6 +2763,14 @@ async function getScopedSalesData({
             receipt.customer_phone ||
             extractCustomerPhoneFromNotes(receipt.notes) ||
             "",
+          paymentMethodCode: normalizePaymentMethodCode(
+            receipt.payment_method_code ||
+              receipt.payment_method ||
+              receipt.payment_method_label,
+          ),
+          paymentMethodLabel: receipt.payment_method_label || "",
+          paymentMethod: receipt.payment_method || "",
+          paymentStatus: receipt.payment_status || "",
           status: receipt.status || "",
           source: receipt.source || "",
         },
@@ -2767,6 +2780,7 @@ async function getScopedSalesData({
     return documents
       .map((document) => ({
         id: document.$id,
+        receiptId: document.receipt_id || "",
         date: `${document.sale_date || ""}`.slice(0, 10),
         saleDate: `${document.sale_date || ""}`,
         stationId: document.station_id || "",
@@ -2779,16 +2793,29 @@ async function getScopedSalesData({
         customerName: receiptsById.get(document.receipt_id)?.customerName || "",
         customerPhone:
           receiptsById.get(document.receipt_id)?.customerPhone || "",
+        paymentMethodCode:
+          receiptsById.get(document.receipt_id)?.paymentMethodCode || "",
+        paymentMethod:
+          receiptsById.get(document.receipt_id)?.paymentMethodLabel ||
+          receiptsById.get(document.receipt_id)?.paymentMethod ||
+          "",
+        paymentStatus:
+          receiptsById.get(document.receipt_id)?.paymentStatus || "",
         receiptStatus: receiptsById.get(document.receipt_id)?.status || "",
         source: receiptsById.get(document.receipt_id)?.source || "",
+        hasReceiptMetadata: receiptsById.has(document.receipt_id || ""),
       }))
       .filter(
         (record) =>
           record.date &&
           record.station &&
           record.item &&
-          (!record.receiptStatus || record.receiptStatus === "completed"),
+          (!shouldLoadReceiptMetadata || record.hasReceiptMetadata) &&
+          (!record.receiptStatus || record.receiptStatus === "completed") &&
+          (!normalizedCashierName ||
+            record.cashierName === normalizedCashierName),
       )
+      .map(({ hasReceiptMetadata, ...record }) => record)
       .sort(
         (left, right) =>
           left.date.localeCompare(right.date) ||
@@ -2850,6 +2877,14 @@ async function loadSalesData({ useMemoryCache = true } = {}) {
           receipt.customer_phone ||
           extractCustomerPhoneFromNotes(receipt.notes) ||
           "",
+        paymentMethodCode: normalizePaymentMethodCode(
+          receipt.payment_method_code ||
+            receipt.payment_method ||
+            receipt.payment_method_label,
+        ),
+        paymentMethodLabel: receipt.payment_method_label || "",
+        paymentMethod: receipt.payment_method || "",
+        paymentStatus: receipt.payment_status || "",
         status: receipt.status || "",
         source: receipt.source || "",
       },
@@ -2859,6 +2894,7 @@ async function loadSalesData({ useMemoryCache = true } = {}) {
   return documents
     .map((document) => ({
       id: document.$id,
+      receiptId: document.receipt_id || "",
       date: `${document.sale_date || ""}`.slice(0, 10),
       saleDate: `${document.sale_date || ""}`,
       stationId: document.station_id || "",
@@ -2870,16 +2906,27 @@ async function loadSalesData({ useMemoryCache = true } = {}) {
       cashierName: receiptsById.get(document.receipt_id)?.cashierName || "",
       customerName: receiptsById.get(document.receipt_id)?.customerName || "",
       customerPhone: receiptsById.get(document.receipt_id)?.customerPhone || "",
+      paymentMethodCode:
+        receiptsById.get(document.receipt_id)?.paymentMethodCode || "",
+      paymentMethod:
+        receiptsById.get(document.receipt_id)?.paymentMethodLabel ||
+        receiptsById.get(document.receipt_id)?.paymentMethod ||
+        "",
+      paymentStatus:
+        receiptsById.get(document.receipt_id)?.paymentStatus || "",
       receiptStatus: receiptsById.get(document.receipt_id)?.status || "",
       source: receiptsById.get(document.receipt_id)?.source || "",
+      hasReceiptMetadata: receiptsById.has(document.receipt_id || ""),
     }))
     .filter(
       (record) =>
         record.date &&
         record.station &&
         record.item &&
+        record.hasReceiptMetadata &&
         (!record.receiptStatus || record.receiptStatus === "completed"),
     )
+    .map(({ hasReceiptMetadata, ...record }) => record)
     .sort(
       (left, right) =>
         left.date.localeCompare(right.date) ||
@@ -2980,6 +3027,11 @@ async function getSalesReceiptMetadataByIds(receiptIds = []) {
             extractCustomerPhoneFromNotes(document.notes) ||
             "",
           status: document.status || "",
+          paymentMethodCode: normalizePaymentMethodCode(
+            document.payment_method_code ||
+              document.payment_method ||
+              document.payment_method_label,
+          ),
           paymentMethodLabel: document.payment_method_label || "",
           paymentMethod: document.payment_method || "",
           paymentStatus: document.payment_status || "",

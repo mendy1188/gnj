@@ -41,7 +41,9 @@ export async function saveManagedBalanceAction(payload) {
   const productCategory = normalizeProductCategory(payload?.productCategory);
   const status = normalizeAccountStatus(payload?.status);
   const notes = `${payload?.notes || ""}`.trim();
-  const adjustmentType = `${payload?.adjustmentType || "credit"}`.trim().toLowerCase();
+  const adjustmentType = `${payload?.adjustmentType || "credit"}`
+    .trim()
+    .toLowerCase();
   const rawAmount = Number(payload?.amount ?? 0);
   const amount = Number.isFinite(rawAmount)
     ? Number(rawAmount.toFixed(2))
@@ -210,16 +212,16 @@ export async function saveManagedBalanceAction(payload) {
           product_id: accountType === "bulk_redeem" ? productId : "",
           product_name: accountType === "bulk_redeem" ? productName : "",
           movement_date: now,
-        direction: signedAmount < 0 ? "debit" : "credit",
-        amount_delta: signedAmount,
-        quantity_delta: 0,
-        balance_amount: nextBalance,
-        balance_quantity: Number(existingAccount?.balance_quantity || 0),
-        due_date: "",
-        actor_user_id: session.userId || "",
-        actor_name: session.fullName || "System",
-        reference_code: referenceCode,
-        notes:
+          direction: signedAmount < 0 ? "debit" : "credit",
+          amount_delta: signedAmount,
+          quantity_delta: 0,
+          balance_amount: nextBalance,
+          balance_quantity: Number(existingAccount?.balance_quantity || 0),
+          due_date: "",
+          actor_user_id: session.userId || "",
+          actor_name: session.fullName || "System",
+          reference_code: referenceCode,
+          notes:
             notes ||
             (existingAccount
               ? "Balance adjusted from Balance Management."
@@ -231,7 +233,9 @@ export async function saveManagedBalanceAction(payload) {
     await createAuditLogRecord(databases, {
       actorUserId: session.userId || "",
       actorName: session.fullName || "System",
-      action: existingAccount ? "customer_balance.updated" : "customer_balance.created",
+      action: existingAccount
+        ? "customer_balance.updated"
+        : "customer_balance.created",
       entityType: "customer_balance",
       entityId: savedAccount.$id,
       stationId,
@@ -298,6 +302,13 @@ export async function settleCreditBalanceAction(payload) {
     };
   }
 
+  if (settlementNotes.length > 2000) {
+    return {
+      success: false,
+      message: "Settlement notes must be 2,000 characters or fewer.",
+    };
+  }
+
   const config = getServerAppwriteConfig();
   const databases = createServerDatabases();
   const now = new Date().toISOString();
@@ -328,7 +339,8 @@ export async function settleCreditBalanceAction(payload) {
     if (settlementAmount > previousBalance) {
       return {
         success: false,
-        message: "Settlement amount cannot exceed the current outstanding balance.",
+        message:
+          "Settlement amount cannot exceed the current outstanding balance.",
       };
     }
 
@@ -342,6 +354,16 @@ export async function settleCreditBalanceAction(payload) {
       };
     }
 
+    if (
+      nextBalance > 0 &&
+      nextPaymentDate < new Date().toISOString().slice(0, 10)
+    ) {
+      return {
+        success: false,
+        message: "Next payment date cannot be in the past.",
+      };
+    }
+
     const updatedAccount = await databases.updateDocument(
       config.databaseId,
       COLLECTIONS.customerBalances,
@@ -350,7 +372,10 @@ export async function settleCreditBalanceAction(payload) {
         balance_amount: nextBalance,
         due_date: nextBalance > 0 ? nextPaymentDate : "",
         updated_at: now,
-        notes: settlementNotes || existingAccount.notes || "",
+        notes: preserveCreditAddressNotes(
+          existingAccount.notes,
+          settlementNotes,
+        ),
       },
     );
 
@@ -375,7 +400,9 @@ export async function settleCreditBalanceAction(payload) {
         actor_user_id: session.userId || "",
         actor_name: session.fullName || "System",
         reference_code: existingAccount.reference_code || "",
-        notes: settlementNotes || "Credit settlement recorded from Balance Management.",
+        notes:
+          settlementNotes ||
+          "Credit settlement recorded from Balance Management.",
       },
     );
 
@@ -420,6 +447,33 @@ export async function settleCreditBalanceAction(payload) {
   }
 }
 
+function preserveCreditAddressNotes(existingNotes, replacementNotes) {
+  const normalizedReplacement = `${replacementNotes || ""}`.trim();
+
+  if (!normalizedReplacement) {
+    return `${existingNotes || ""}`;
+  }
+
+  const addressLines = `${existingNotes || ""}`
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        line.startsWith("Physical address:") ||
+        line.startsWith("Digital address:"),
+    );
+  const addressSuffix = addressLines.join("\n");
+  const replacementLimit = Math.max(
+    0,
+    2000 - addressSuffix.length - (addressSuffix ? 1 : 0),
+  );
+
+  return [normalizedReplacement.slice(0, replacementLimit), addressSuffix]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 2000);
+}
+
 function createServerDatabases() {
   const config = getServerAppwriteConfig();
   const client = new Client()
@@ -458,9 +512,11 @@ async function findCustomerBalanceByReference(
     ],
   );
 
-  return (response.documents || []).find(
-    (document) => document.$id !== excludeAccountId,
-  ) || null;
+  return (
+    (response.documents || []).find(
+      (document) => document.$id !== excludeAccountId,
+    ) || null
+  );
 }
 
 async function createAuditLogRecord(
@@ -552,7 +608,8 @@ async function syncCreditReceiptStatuses(
     return;
   }
 
-  const paymentStatus = Number(nextBalance || 0) <= 0 ? "paid" : "partially_paid";
+  const paymentStatus =
+    Number(nextBalance || 0) <= 0 ? "paid" : "partially_paid";
 
   for (let index = 0; index < receiptIds.length; index += 100) {
     const batch = receiptIds.slice(index, index + 100);
@@ -564,15 +621,25 @@ async function syncCreditReceiptStatuses(
 
     await Promise.all(
       (receiptResponse.documents || []).map((receipt) =>
-        databases.updateDocument(databaseId, COLLECTIONS.salesReceipts, receipt.$id, {
-          payment_status: paymentStatus,
-        }),
+        databases.updateDocument(
+          databaseId,
+          COLLECTIONS.salesReceipts,
+          receipt.$id,
+          {
+            payment_status: paymentStatus,
+          },
+        ),
       ),
     );
   }
 }
 
-async function listAllDocuments(databases, databaseId, collectionId, queries = []) {
+async function listAllDocuments(
+  databases,
+  databaseId,
+  collectionId,
+  queries = [],
+) {
   const documents = [];
   let offset = 0;
   let total = Number.POSITIVE_INFINITY;

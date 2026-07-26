@@ -37,7 +37,10 @@ import {
   STATION_PRODUCT_DAILY_SUMMARY_COLLECTION,
   upsertStationProductDailySummariesForSale,
 } from "@/features/reports/station-product-summary";
-import { getActivePaymentMethodsData, invalidateAppwriteCollectionCache } from "@/lib/data/appwrite-data";
+import {
+  getActivePaymentMethodsData,
+  invalidateAppwriteCollectionCache,
+} from "@/lib/data/appwrite-data";
 import { getServerAppwriteConfig, hasServerAppwriteConfig } from "@/lib/env";
 
 const COLLECTIONS = {
@@ -90,8 +93,14 @@ export async function completePosSaleAction(payload, options = {}) {
   const customerName = `${payload?.customerName || ""}`.trim();
   const customerPhone = `${payload?.customerPhone || ""}`.trim();
   const customerEmail = `${payload?.customerEmail || ""}`.trim().toLowerCase();
-  const vehicleRegistrationNumber = `${payload?.vehicleRegistrationNumber || ""}`.trim();
-  const companyOrOrganizationName = `${payload?.companyOrOrganizationName || ""}`.trim();
+  const customerPhysicalAddress =
+    `${payload?.customerPhysicalAddress || ""}`.trim();
+  const customerDigitalAddress =
+    `${payload?.customerDigitalAddress || ""}`.trim();
+  const vehicleRegistrationNumber =
+    `${payload?.vehicleRegistrationNumber || ""}`.trim();
+  const companyOrOrganizationName =
+    `${payload?.companyOrOrganizationName || ""}`.trim();
   const billableTo = `${payload?.billableTo || ""}`.trim();
   const clientSaleId = `${payload?.clientSaleId || ""}`.trim();
   const couponCode = `${payload?.couponCode || ""}`.trim();
@@ -99,17 +108,25 @@ export async function completePosSaleAction(payload, options = {}) {
   const fuelGiftCode = `${payload?.fuelGiftCode || ""}`.trim();
   const creditDueDate = normalizeDateOnlyInput(payload?.creditDueDate);
   const paymentNote = `${payload?.paymentNote || ""}`.trim();
+  const saleChannel = `${payload?.saleChannel || "standard-pos"}`
+    .trim()
+    .toLowerCase();
   const saleDate =
     normalizeSaleDateInput(payload?.saleDate) || new Date().toISOString();
   const activePaymentMethods = await getActivePaymentMethodsData();
   const validPaymentMethods = new Set(
-    activePaymentMethods.map((method) => `${method.code || ""}`.trim().toLowerCase()),
+    activePaymentMethods.map((method) =>
+      `${method.code || ""}`.trim().toLowerCase(),
+    ),
   );
   const selectedPaymentMethod =
-    activePaymentMethods.find((method) => method.code === paymentMethod) || null;
+    activePaymentMethods.find((method) => method.code === paymentMethod) ||
+    null;
   const paymentFlow = getPaymentFlow(paymentMethod);
   const requiresVehicleRegistration = items.some(
-    (item) => normalizeCategory(item?.category, item?.name || item?.productName) === "fuel",
+    (item) =>
+      normalizeCategory(item?.category, item?.name || item?.productName) ===
+      "fuel",
   );
 
   if (!session) {
@@ -126,7 +143,32 @@ export async function completePosSaleAction(payload, options = {}) {
     };
   }
 
-  const cashierName = `${session.fullName || payload?.cashierName || "POS Counter"}`.trim();
+  const fieldLengthError = getPosFieldLengthError([
+    ["Customer name", customerName, 255],
+    ["Customer phone", customerPhone, 32],
+    ["Customer email", customerEmail, 255],
+    ["Physical address", customerPhysicalAddress, 500],
+    ["Digital address", customerDigitalAddress, 128],
+    ["Vehicle registration", vehicleRegistrationNumber, 64],
+    ["Company or organization", companyOrOrganizationName, 255],
+    ["Billable-to details", billableTo, 255],
+    ["Payment note", paymentNote, 1000],
+    ["Client sale ID", clientSaleId, 128],
+  ]);
+
+  if (fieldLengthError) {
+    return { success: false, message: fieldLengthError };
+  }
+
+  if (items.length > 100) {
+    return {
+      success: false,
+      message: "A POS sale cannot contain more than 100 line items.",
+    };
+  }
+
+  const cashierName =
+    `${session.fullName || payload?.cashierName || "POS Counter"}`.trim();
 
   if (!stationId) {
     return {
@@ -139,6 +181,21 @@ export async function completePosSaleAction(payload, options = {}) {
     return {
       success: false,
       message: "Select an available payment method.",
+    };
+  }
+
+  if (paymentFlow === "credit" && saleChannel !== "credit-sale") {
+    return {
+      success: false,
+      message:
+        "Credit sales must be recorded from Credit / Debt Management → Credit Sale.",
+    };
+  }
+
+  if (saleChannel === "credit-sale" && paymentFlow !== "credit") {
+    return {
+      success: false,
+      message: "The Credit Sale screen only accepts the Credit payment method.",
     };
   }
 
@@ -158,17 +215,17 @@ export async function completePosSaleAction(payload, options = {}) {
   ) {
     return {
       success: false,
-      message:
-        requiresVehicleRegistration
-          ? "Fuel coupon sales require customer name, phone number, vehicle registration number, and company or organization name."
-          : "Coupon sales require customer name, phone number, and company or organization name.",
+      message: requiresVehicleRegistration
+        ? "Fuel coupon sales require customer name, phone number, vehicle registration number, and company or organization name."
+        : "Coupon sales require customer name, phone number, and company or organization name.",
     };
   }
 
   if (paymentFlow === "bulk-redeem" && !bulkReferenceCode) {
     return {
       success: false,
-      message: "Enter the bulk redemption reference before completing the sale.",
+      message:
+        "Enter the bulk redemption reference before completing the sale.",
     };
   }
 
@@ -183,15 +240,26 @@ export async function completePosSaleAction(payload, options = {}) {
     paymentFlow === "credit" &&
     (!customerName ||
       !customerPhone ||
+      !customerPhysicalAddress ||
       (requiresVehicleRegistration && !vehicleRegistrationNumber) ||
       !billableTo)
   ) {
     return {
       success: false,
-      message:
-        requiresVehicleRegistration
-          ? "Fuel credit sales require customer name, phone number, vehicle registration number, and billable-to details."
-          : "Credit sales require customer name, phone number, and billable-to details.",
+      message: requiresVehicleRegistration
+        ? "Fuel credit sales require customer name, phone number, physical address, vehicle registration number, and billable-to details."
+        : "Credit sales require customer name, phone number, physical address, and billable-to details.",
+    };
+  }
+
+  if (
+    paymentFlow === "credit" &&
+    creditDueDate &&
+    creditDueDate < new Date().toISOString().slice(0, 10)
+  ) {
+    return {
+      success: false,
+      message: "Credit due date cannot be in the past.",
     };
   }
 
@@ -217,7 +285,11 @@ export async function completePosSaleAction(payload, options = {}) {
       unitPrice: Number(item?.price ?? item?.unitPrice ?? 0),
     }))
     .filter((item) => {
-      if (!item.productName || !Number.isFinite(item.unitPrice) || item.unitPrice < 0) {
+      if (
+        !item.productName ||
+        !Number.isFinite(item.unitPrice) ||
+        item.unitPrice < 0
+      ) {
         return false;
       }
 
@@ -243,8 +315,9 @@ export async function completePosSaleAction(payload, options = {}) {
     const databases = createServerDatabases();
     transactionEnvelopeDatabases = databases;
     const enhancedWriteSupport = await getEnhancedWriteSupport(databases);
-    transactionEnvelopeCollectionReady =
-      Boolean(enhancedWriteSupport.posTransactionEnvelopes);
+    transactionEnvelopeCollectionReady = Boolean(
+      enhancedWriteSupport.posTransactionEnvelopes,
+    );
     const receiptId = clientSaleId
       ? buildClientSaleDocumentId(clientSaleId)
       : ID.unique();
@@ -259,8 +332,9 @@ export async function completePosSaleAction(payload, options = {}) {
         success: true,
         message: `Sale saved as ${existingReceipt.receipt_number || buildReceiptNumber({ saleDate, clientSaleId })}.`,
         receiptNumber:
-          existingReceipt.receipt_number || buildReceiptNumber({ saleDate, clientSaleId }),
-        };
+          existingReceipt.receipt_number ||
+          buildReceiptNumber({ saleDate, clientSaleId }),
+      };
     }
 
     if (isAdvancedPaymentFlow(paymentFlow)) {
@@ -306,7 +380,9 @@ export async function completePosSaleAction(payload, options = {}) {
         }
 
         if (`${product.status || "active"}` !== "active") {
-          throw new Error(`Product "${item.productName}" is currently disabled.`);
+          throw new Error(
+            `Product "${item.productName}" is currently disabled.`,
+          );
         }
 
         const resolvedCategory = normalizeCategory(
@@ -316,11 +392,11 @@ export async function completePosSaleAction(payload, options = {}) {
         const requestedUnitPrice = Number(item.unitPrice ?? 0);
         const productSellingPrice = Number(product.selling_price ?? 0);
         const resolvedUnitPrice =
-          (Number.isFinite(requestedUnitPrice) && requestedUnitPrice > 0
-            ? requestedUnitPrice
-            : 0) ||
           (Number.isFinite(productSellingPrice) && productSellingPrice > 0
             ? productSellingPrice
+            : 0) ||
+          (Number.isFinite(requestedUnitPrice) && requestedUnitPrice > 0
+            ? requestedUnitPrice
             : 0);
         const resolvedQuantity = resolveSaleQuantity({
           ...item,
@@ -363,7 +439,9 @@ export async function completePosSaleAction(payload, options = {}) {
       })),
       session,
     );
-    const allowedProductIds = new Set(allowedProducts.map((product) => product.id));
+    const allowedProductIds = new Set(
+      allowedProducts.map((product) => product.id),
+    );
 
     if (resolvedItems.some((item) => !allowedProductIds.has(item.productId))) {
       const message = isFuelSales(session.roleName)
@@ -419,14 +497,15 @@ export async function completePosSaleAction(payload, options = {}) {
       },
     );
     transactionEnvelopeId = transactionEnvelope?.$id || "";
-    const paymentStatus =
-      paymentFlow === "credit" ? "pending" : "paid";
+    const paymentStatus = paymentFlow === "credit" ? "pending" : "paid";
     const balanceOperation = await prepareCustomerBalanceOperation(databases, {
       paymentFlow,
       station,
       customerName,
       customerPhone,
       customerEmail,
+      customerPhysicalAddress,
+      customerDigitalAddress,
       companyOrOrganizationName,
       couponCode,
       bulkReferenceCode,
@@ -466,59 +545,59 @@ export async function completePosSaleAction(payload, options = {}) {
       };
     });
 
-    await createSalesReceiptDocument(
-      databases,
-      receiptId,
-      {
-        receipt_number: receiptNumber,
-        station_id: station.$id,
-        station_name: station.name || "",
-        sale_date: saleDate,
-        source: "pos",
-        subtotal,
-        tax_amount: 0,
-        discount_amount: 0,
-        total_amount: totalAmount,
-        payment_method: paymentMethod,
-        payment_method_code: paymentMethod,
-        payment_method_label: selectedPaymentMethod?.label || paymentMethod,
-        payment_status: paymentStatus,
-        status: "completed",
-        cashier_name: cashierName || "POS Counter",
-        customer_name: resolvedSaleCustomerName,
-        customer_phone: resolvedSaleCustomerPhone,
-        vehicle_registration_number: vehicleRegistrationNumber || "",
-        company_name: companyOrOrganizationName || "",
-        billable_to: billableTo || "",
-        notes: buildReceiptNotes({
-          customerPhone: resolvedSaleCustomerPhone,
-          vehicleRegistrationNumber,
-          companyOrOrganizationName,
-          billableTo,
-          paymentFlow,
-          couponCode:
-            paymentFlow === "coupon"
-              ? balanceOperation?.referenceCode || couponCode
-              : couponCode,
-          bulkReferenceCode,
-          fuelGiftCode:
-            paymentFlow === "fuel-gift"
-              ? balanceOperation?.referenceCode || fuelGiftCode
-              : fuelGiftCode,
-          fuelGiftBulkFunding:
-            paymentFlow === "fuel-gift"
-              ? serializeFuelGiftBulkFunding(balanceOperation?.bulkAllocations || [])
-              : "",
-          fuelGiftRewardFunding:
-            paymentFlow === "fuel-gift"
-              ? Number(balanceOperation?.rewardAllocation?.amount || 0)
-              : 0,
-          creditDueDate,
-          paymentNote,
-        }),
-        ...(clientSaleId ? { idempotency_key: clientSaleId } : {}),
-      },
-    );
+    await createSalesReceiptDocument(databases, receiptId, {
+      receipt_number: receiptNumber,
+      station_id: station.$id,
+      station_name: station.name || "",
+      sale_date: saleDate,
+      source: "pos",
+      subtotal,
+      tax_amount: 0,
+      discount_amount: 0,
+      total_amount: totalAmount,
+      payment_method: paymentMethod,
+      payment_method_code: paymentMethod,
+      payment_method_label: selectedPaymentMethod?.label || paymentMethod,
+      payment_status: paymentStatus,
+      status: "completed",
+      cashier_name: cashierName || "POS Counter",
+      customer_name: resolvedSaleCustomerName,
+      customer_phone: resolvedSaleCustomerPhone,
+      vehicle_registration_number: vehicleRegistrationNumber || "",
+      company_name: companyOrOrganizationName || "",
+      billable_to: billableTo || "",
+      notes: buildReceiptNotes({
+        customerPhone: resolvedSaleCustomerPhone,
+        customerPhysicalAddress,
+        customerDigitalAddress,
+        vehicleRegistrationNumber,
+        companyOrOrganizationName,
+        billableTo,
+        paymentFlow,
+        couponCode:
+          paymentFlow === "coupon"
+            ? balanceOperation?.referenceCode || couponCode
+            : couponCode,
+        bulkReferenceCode,
+        fuelGiftCode:
+          paymentFlow === "fuel-gift"
+            ? balanceOperation?.referenceCode || fuelGiftCode
+            : fuelGiftCode,
+        fuelGiftBulkFunding:
+          paymentFlow === "fuel-gift"
+            ? serializeFuelGiftBulkFunding(
+                balanceOperation?.bulkAllocations || [],
+              )
+            : "",
+        fuelGiftRewardFunding:
+          paymentFlow === "fuel-gift"
+            ? Number(balanceOperation?.rewardAllocation?.amount || 0)
+            : 0,
+        creditDueDate,
+        paymentNote,
+      }),
+      ...(clientSaleId ? { idempotency_key: clientSaleId } : {}),
+    });
 
     await Promise.all(
       resolvedItems.map((item, index) =>
@@ -750,6 +829,7 @@ export async function completePosSaleAction(payload, options = {}) {
     revalidatePath("/bulk-fuel-purchases");
     revalidatePath("/bulk-fuel-purchase-settings");
     revalidatePath("/pos");
+    revalidatePath("/credit-sale");
 
     return {
       success: true,
@@ -792,7 +872,8 @@ export async function reversePosSaleAction(payload, options = {}) {
   const receiptId = `${payload?.receiptId || ""}`.trim();
   const reversalNote = `${payload?.reversalNote || ""}`.trim();
   const session = options.sessionOverride || (await getCurrentSession());
-  const reversedAt = normalizeSaleDateInput(payload?.reversedAt) || new Date().toISOString();
+  const reversedAt =
+    normalizeSaleDateInput(payload?.reversedAt) || new Date().toISOString();
   const todayDate = new Date().toISOString().slice(0, 10);
   let transactionEnvelopeDatabases = null;
   let transactionEnvelopeId = "";
@@ -830,8 +911,9 @@ export async function reversePosSaleAction(payload, options = {}) {
     const databases = createServerDatabases();
     transactionEnvelopeDatabases = databases;
     const enhancedWriteSupport = await getEnhancedWriteSupport(databases);
-    transactionEnvelopeCollectionReady =
-      Boolean(enhancedWriteSupport.posTransactionEnvelopes);
+    transactionEnvelopeCollectionReady = Boolean(
+      enhancedWriteSupport.posTransactionEnvelopes,
+    );
     const receipt = await getDocumentOrNull(
       databases,
       COLLECTIONS.salesReceipts,
@@ -874,7 +956,10 @@ export async function reversePosSaleAction(payload, options = {}) {
       };
     }
 
-    if (`${receipt.cashier_name || ""}`.trim() !== `${session.fullName || ""}`.trim()) {
+    if (
+      `${receipt.cashier_name || ""}`.trim() !==
+      `${session.fullName || ""}`.trim()
+    ) {
       return {
         success: false,
         message: "You can only reverse your own transactions.",
@@ -883,15 +968,20 @@ export async function reversePosSaleAction(payload, options = {}) {
 
     if (
       session.branchId &&
-      `${receipt.station_id || ""}`.trim() !== `${session.branchId || ""}`.trim()
+      `${receipt.station_id || ""}`.trim() !==
+        `${session.branchId || ""}`.trim()
     ) {
       return {
         success: false,
-        message: "You can only reverse transactions from your assigned station.",
+        message:
+          "You can only reverse transactions from your assigned station.",
       };
     }
 
-    const receiptItems = await listReceiptItemsByReceiptId(databases, receiptId);
+    const receiptItems = await listReceiptItemsByReceiptId(
+      databases,
+      receiptId,
+    );
 
     if (receiptItems.length === 0) {
       return {
@@ -953,7 +1043,8 @@ export async function reversePosSaleAction(payload, options = {}) {
       }
 
       if (
-        Number(rewardReversalCandidate.rewardAccount.balanceAmount || 0) + 0.009 <
+        Number(rewardReversalCandidate.rewardAccount.balanceAmount || 0) +
+          0.009 <
         Number(rewardReversalCandidate.amount || 0)
       ) {
         return {
@@ -1188,7 +1279,10 @@ export async function reversePosSaleAction(payload, options = {}) {
       transactionEnvelopeId,
       {
         status: "repair_needed",
-        error_message: `${error?.message || "POS reversal failed."}`.slice(0, 1000),
+        error_message: `${error?.message || "POS reversal failed."}`.slice(
+          0,
+          1000,
+        ),
       },
       {
         collectionReady: transactionEnvelopeCollectionReady,
@@ -1291,7 +1385,10 @@ function isAdvancedPaymentFlow(paymentFlow) {
   return ["coupon", "credit", "bulk-redeem", "fuel-gift"].includes(paymentFlow);
 }
 
-async function resolveRewardClientForRedeemedSale(paymentFlow, balanceOperation) {
+async function resolveRewardClientForRedeemedSale(
+  paymentFlow,
+  balanceOperation,
+) {
   if (!balanceOperation) {
     return null;
   }
@@ -1313,7 +1410,10 @@ async function resolveRewardClientForRedeemedSale(paymentFlow, balanceOperation)
 
     const clientUser = await findClientUserByPhone(clientPhone);
 
-    if (!clientUser || `${clientUser.status || ""}`.trim().toLowerCase() !== "active") {
+    if (
+      !clientUser ||
+      `${clientUser.status || ""}`.trim().toLowerCase() !== "active"
+    ) {
       return null;
     }
 
@@ -1333,7 +1433,10 @@ async function resolveRewardClientForRedeemedSale(paymentFlow, balanceOperation)
 
     const clientUser = await findClientUserByPhone(clientPhone);
 
-    if (!clientUser || `${clientUser.status || ""}`.trim().toLowerCase() !== "active") {
+    if (
+      !clientUser ||
+      `${clientUser.status || ""}`.trim().toLowerCase() !== "active"
+    ) {
       return null;
     }
 
@@ -1401,7 +1504,13 @@ async function applyCashBackForRedeemedSale({
 function ensureAdvancedPaymentSupport(enhancedWriteSupport, paymentFlow) {
   const requiredFlags =
     paymentFlow === "coupon"
-      ? ["salesPayments", "couponCompanies", "couponPurchases", "coupons", "couponMovements"]
+      ? [
+          "salesPayments",
+          "couponCompanies",
+          "couponPurchases",
+          "coupons",
+          "couponMovements",
+        ]
       : paymentFlow === "fuel-gift"
         ? [
             "salesPayments",
@@ -1411,7 +1520,7 @@ function ensureAdvancedPaymentSupport(enhancedWriteSupport, paymentFlow) {
             "rewardAccounts",
             "rewardMovements",
           ]
-      : ["salesPayments", "customerBalances", "customerBalanceMovements"];
+        : ["salesPayments", "customerBalances", "customerBalanceMovements"];
   const missingCapabilities = requiredFlags.filter(
     (key) => !enhancedWriteSupport?.[key],
   );
@@ -1425,7 +1534,7 @@ function ensureAdvancedPaymentSupport(enhancedWriteSupport, paymentFlow) {
       ? "bulk redemption"
       : paymentFlow === "fuel-gift"
         ? "fuel gift"
-      : paymentFlow;
+        : paymentFlow;
 
   throw new Error(
     `The latest Appwrite schema update is required before ${paymentLabel} sales can be recorded.`,
@@ -1440,6 +1549,8 @@ async function prepareCustomerBalanceOperation(
     customerName,
     customerPhone,
     customerEmail,
+    customerPhysicalAddress,
+    customerDigitalAddress,
     companyOrOrganizationName,
     couponCode,
     bulkReferenceCode,
@@ -1474,13 +1585,16 @@ async function prepareCustomerBalanceOperation(
 
   const accountType = toBalanceAccountType(paymentFlow);
   const normalizedAmount = Number(totalAmount || 0);
-  const normalizedCustomerName = `${customerName || ""}`.trim() || "Walk-in Customer";
+  const normalizedCustomerName =
+    `${customerName || ""}`.trim() || "Walk-in Customer";
   const normalizedCustomerPhone = `${customerPhone || ""}`.trim();
   const normalizedCustomerEmail = `${customerEmail || ""}`.trim().toLowerCase();
+  const normalizedCustomerPhysicalAddress =
+    `${customerPhysicalAddress || ""}`.trim();
+  const normalizedCustomerDigitalAddress =
+    `${customerDigitalAddress || ""}`.trim();
   const referenceCode =
-    paymentFlow === "bulk-redeem"
-        ? `${bulkReferenceCode || ""}`.trim()
-        : "";
+    paymentFlow === "bulk-redeem" ? `${bulkReferenceCode || ""}`.trim() : "";
   const productCategory = deriveBalanceProductCategory(items);
   const productBinding = deriveSingleProductBinding(items);
 
@@ -1491,6 +1605,15 @@ async function prepareCustomerBalanceOperation(
       stationId: station.$id,
     });
     const previousBalance = Number(existingAccount?.balance_amount || 0);
+    const existingAddresses = parseCreditAddressNotes(existingAccount?.notes);
+    const resolvedPhysicalAddress =
+      normalizedCustomerPhysicalAddress ||
+      existingAddresses.physicalAddress ||
+      "";
+    const resolvedDigitalAddress =
+      normalizedCustomerDigitalAddress ||
+      existingAddresses.digitalAddress ||
+      "";
 
     return {
       strict: true,
@@ -1499,7 +1622,10 @@ async function prepareCustomerBalanceOperation(
       accountDocument: existingAccount,
       customerName: normalizedCustomerName,
       customerPhone: normalizedCustomerPhone,
-      customerEmail: normalizedCustomerEmail || existingAccount?.customer_email || "",
+      customerEmail:
+        normalizedCustomerEmail || existingAccount?.customer_email || "",
+      customerPhysicalAddress: resolvedPhysicalAddress,
+      customerDigitalAddress: resolvedDigitalAddress,
       stationId: station.$id,
       stationName: station.name || "",
       productId: existingAccount?.product_id || productBinding.productId || "",
@@ -1524,6 +1650,8 @@ async function prepareCustomerBalanceOperation(
       notes: buildCustomerBalanceAccountNotes({
         paymentFlow,
         creditDueDate,
+        customerPhysicalAddress: resolvedPhysicalAddress,
+        customerDigitalAddress: resolvedDigitalAddress,
       }),
     };
   }
@@ -1557,21 +1685,15 @@ async function prepareCustomerBalanceOperation(
     mode: "update",
     accountDocument: existingAccount,
     customerName: existingAccount.customer_name || normalizedCustomerName,
-    customerPhone:
-      existingAccount.customer_phone || normalizedCustomerPhone,
-    customerEmail:
-      existingAccount.customer_email || normalizedCustomerEmail,
-    stationId:
-      existingAccount.station_id || station.$id,
-    stationName:
-      existingAccount.station_name || station.name || "",
-    productId:
-      existingAccount.product_id || productBinding.productId || "",
+    customerPhone: existingAccount.customer_phone || normalizedCustomerPhone,
+    customerEmail: existingAccount.customer_email || normalizedCustomerEmail,
+    stationId: existingAccount.station_id || station.$id,
+    stationName: existingAccount.station_name || station.name || "",
+    productId: existingAccount.product_id || productBinding.productId || "",
     productName:
       existingAccount.product_name || productBinding.productName || "",
     referenceCode,
-    productCategory:
-      existingAccount.product_category || productCategory,
+    productCategory: existingAccount.product_category || productCategory,
     amountDelta: Number((-normalizedAmount).toFixed(2)),
     direction: "debit",
     previousBalance,
@@ -1586,12 +1708,7 @@ async function prepareCustomerBalanceOperation(
 
 async function findCustomerBalanceAccount(
   databases,
-  {
-    accountType,
-    referenceCode = "",
-    customerPhone = "",
-    stationId = "",
-  },
+  { accountType, referenceCode = "", customerPhone = "", stationId = "" },
 ) {
   const queries = [Query.equal("account_type", accountType), Query.limit(1)];
   const normalizedReferenceCode = `${referenceCode || ""}`.trim();
@@ -1669,7 +1786,8 @@ async function applyCustomerBalanceOperation(databases, operation, context) {
         balance_amount: operation.nextBalance,
         balance_quantity: 0,
         unit: "",
-        due_date: operation.accountType === "credit" ? operation.dueDate || "" : "",
+        due_date:
+          operation.accountType === "credit" ? operation.dueDate || "" : "",
         status: "active",
         created_at: context.saleDate,
         updated_at: context.saleDate,
@@ -1684,7 +1802,8 @@ async function applyCustomerBalanceOperation(databases, operation, context) {
       {
         customer_name: operation.customerName,
         customer_phone: operation.customerPhone,
-        customer_email: operation.customerEmail || accountDocument.customer_email || "",
+        customer_email:
+          operation.customerEmail || accountDocument.customer_email || "",
         station_id: operation.stationId,
         station_name: operation.stationName,
         product_id: operation.productId || "",
@@ -1720,7 +1839,8 @@ async function applyCustomerBalanceOperation(databases, operation, context) {
       quantity_delta: 0,
       balance_amount: operation.nextBalance,
       balance_quantity: 0,
-      due_date: operation.accountType === "credit" ? operation.dueDate || "" : "",
+      due_date:
+        operation.accountType === "credit" ? operation.dueDate || "" : "",
       actor_user_id: context.actorUserId,
       actor_name: context.actorName,
       reference_code: operation.referenceCode,
@@ -1788,12 +1908,7 @@ function isUnsupportedCustomerEmailError(error) {
 
 async function prepareCouponBalanceOperation(
   databases,
-  {
-    companyOrOrganizationName,
-    couponCode,
-    saleDate,
-    totalAmount,
-  },
+  { companyOrOrganizationName, couponCode, saleDate, totalAmount },
 ) {
   const databaseId = getServerAppwriteConfig().databaseId;
   const normalizedCouponCode = `${couponCode || ""}`.trim().toUpperCase();
@@ -1902,11 +2017,7 @@ async function applyCouponBalanceOperation(databases, operation, context) {
 
 async function prepareFuelGiftRedemptionOperation(
   databases,
-  {
-    fuelGiftCode,
-    totalAmount,
-    items,
-  },
+  { fuelGiftCode, totalAmount, items },
 ) {
   const normalizedFuelGiftCode = `${fuelGiftCode || ""}`.trim().toUpperCase();
 
@@ -1978,7 +2089,10 @@ async function prepareFuelGiftRedemptionOperation(
     if (!rewardClientUserId && rewardClientPhone) {
       const clientUser = await findClientUserByPhone(rewardClientPhone);
 
-      if (clientUser && `${clientUser.status || ""}`.trim().toLowerCase() === "active") {
+      if (
+        clientUser &&
+        `${clientUser.status || ""}`.trim().toLowerCase() === "active"
+      ) {
         rewardClientUserId = clientUser.id;
         rewardClientName = clientUser.fullName || rewardClientName;
         rewardClientPhone = clientUser.phone || rewardClientPhone;
@@ -1986,9 +2100,8 @@ async function prepareFuelGiftRedemptionOperation(
     }
 
     if (rewardClientUserId) {
-      const rewardAccount = await getClientRewardAccountByClientUserId(
-        rewardClientUserId,
-      );
+      const rewardAccount =
+        await getClientRewardAccountByClientUserId(rewardClientUserId);
       const previousBalance = Number(rewardAccount?.balanceAmount || 0);
       const amountToDebit = Number(
         Math.min(previousBalance, remainingAmount).toFixed(2),
@@ -2031,17 +2144,16 @@ async function prepareFuelGiftRedemptionOperation(
 
 async function listFuelGiftBulkBalanceAccounts(
   databases,
-  {
-    customerPhone,
-    productId,
-    productName,
-  } = {},
+  { customerPhone, productId, productName } = {},
 ) {
   const normalizedCustomerPhone = `${customerPhone || ""}`.trim();
   const normalizedProductId = `${productId || ""}`.trim();
   const normalizedProductName = normalizeProductIdentity(productName);
 
-  if (!normalizedCustomerPhone || (!normalizedProductId && !normalizedProductName)) {
+  if (
+    !normalizedCustomerPhone ||
+    (!normalizedProductId && !normalizedProductName)
+  ) {
     return [];
   }
 
@@ -2061,7 +2173,8 @@ async function listFuelGiftBulkBalanceAccounts(
       const matchesProduct =
         (normalizedProductId &&
           `${document.product_id || ""}`.trim() === normalizedProductId) ||
-        normalizeProductIdentity(document.product_name || "") === normalizedProductName;
+        normalizeProductIdentity(document.product_name || "") ===
+          normalizedProductName;
 
       return matchesProduct && Number(document.balance_amount || 0) > 0;
     })
@@ -2113,7 +2226,10 @@ async function applyFuelGiftRedemptionOperation(databases, operation, context) {
     );
   }
 
-  if (operation.rewardAllocation?.amount > 0 && operation.rewardAllocation.clientUserId) {
+  if (
+    operation.rewardAllocation?.amount > 0 &&
+    operation.rewardAllocation.clientUserId
+  ) {
     await applyClientRewardMovement({
       clientUserId: operation.rewardAllocation.clientUserId,
       clientName: operation.rewardAllocation.clientName,
@@ -2146,10 +2262,7 @@ async function applyFuelGiftRedemptionOperation(databases, operation, context) {
       receipt_number: context.receiptNumber,
       redeemed_at: context.saleDate,
       notes: appendLineNote(
-        appendLineNote(
-          operation.giftDocument.notes,
-          "Redeemed through POS.",
-        ),
+        appendLineNote(operation.giftDocument.notes, "Redeemed through POS."),
         buildFuelGiftFundingAuditNote(operation),
       ),
     },
@@ -2229,10 +2342,7 @@ async function createSalesPaymentRecord(
 async function voidSalesPaymentRecordsForReceipt(
   databases,
   receiptId,
-  {
-    reversedAt = "",
-    reversedBy = "",
-  } = {},
+  { reversedAt = "", reversedBy = "" } = {},
 ) {
   const response = await databases.listDocuments(
     getServerAppwriteConfig().databaseId,
@@ -2474,7 +2584,10 @@ async function updatePosTransactionEnvelopeRecord(
   }
 }
 
-async function runOptionalEnhancedWrite(worker, { strict = false, label = "record" } = {}) {
+async function runOptionalEnhancedWrite(
+  worker,
+  { strict = false, label = "record" } = {},
+) {
   try {
     await worker();
   } catch (error) {
@@ -2512,7 +2625,15 @@ async function upsertStationDailySummary(
 
 async function upsertCashierDailySummary(
   databases,
-  { saleDate, stationId, stationName, cashierUserId, cashierName, items, multiplier = 1 },
+  {
+    saleDate,
+    stationId,
+    stationName,
+    cashierUserId,
+    cashierName,
+    items,
+    multiplier = 1,
+  },
 ) {
   const date = `${saleDate || ""}`.slice(0, 10);
   const summaryDelta = buildSummaryDelta(items, multiplier);
@@ -2691,11 +2812,7 @@ async function waitForSummaryDocument(
   documentId,
   seedData,
 ) {
-  for (
-    let attempt = 1;
-    attempt <= SUMMARY_READ_RETRY_ATTEMPTS;
-    attempt += 1
-  ) {
+  for (let attempt = 1; attempt <= SUMMARY_READ_RETRY_ATTEMPTS; attempt += 1) {
     const document = await findSummaryDocument(
       databases,
       collectionId,
@@ -2863,12 +2980,7 @@ async function listReceiptItemsByReceiptId(databases, receiptId) {
 async function reverseReceiptPaymentEffects(
   databases,
   receipt,
-  {
-    resolvedItems,
-    reversedAt,
-    actorUserId = "",
-    actorName = "",
-  } = {},
+  { resolvedItems, reversedAt, actorUserId = "", actorName = "" } = {},
 ) {
   const paymentFlow = getPaymentFlow(
     receipt.payment_method_code || receipt.payment_method || "",
@@ -2906,17 +3018,15 @@ async function reverseReceiptPaymentEffects(
 async function reverseCouponPaymentEffect(
   databases,
   receipt,
-  {
-    reversedAt,
-    actorUserId = "",
-    actorName = "",
-  } = {},
+  { reversedAt, actorUserId = "", actorName = "" } = {},
 ) {
   const databaseId = getServerAppwriteConfig().databaseId;
   const couponCode = extractReceiptNoteValue(receipt.notes, "Coupon code");
 
   if (!couponCode) {
-    throw new Error("Coupon reversal could not be completed because the coupon code is missing.");
+    throw new Error(
+      "Coupon reversal could not be completed because the coupon code is missing.",
+    );
   }
 
   const couponDocument = await findCouponByCode(
@@ -2926,12 +3036,16 @@ async function reverseCouponPaymentEffect(
   );
 
   if (!couponDocument) {
-    throw new Error("Coupon reversal could not be completed because the coupon record was not found.");
+    throw new Error(
+      "Coupon reversal could not be completed because the coupon record was not found.",
+    );
   }
 
   const faceValue = Number(couponDocument.face_value || 0);
   const previousBalance = Number(couponDocument.remaining_value || 0);
-  const nextBalance = Number((previousBalance + Number(receipt.total_amount || 0)).toFixed(2));
+  const nextBalance = Number(
+    (previousBalance + Number(receipt.total_amount || 0)).toFixed(2),
+  );
 
   if (faceValue > 0 && nextBalance - faceValue > 0.009) {
     throw new Error(
@@ -2939,10 +3053,7 @@ async function reverseCouponPaymentEffect(
     );
   }
 
-  const status = buildCouponStatusFromRemainingValue(
-    faceValue,
-    nextBalance,
-  );
+  const status = buildCouponStatusFromRemainingValue(faceValue, nextBalance);
 
   const updatedCoupon = await databases.updateDocument(
     databaseId,
@@ -2995,11 +3106,7 @@ async function reverseCouponPaymentEffect(
 async function reverseFuelGiftPaymentEffect(
   databases,
   receipt,
-  {
-    reversedAt,
-    actorUserId = "",
-    actorName = "",
-  } = {},
+  { reversedAt, actorUserId = "", actorName = "" } = {},
 ) {
   const fuelGiftCode = extractReceiptNoteValue(receipt.notes, "Fuel gift code");
 
@@ -3037,7 +3144,10 @@ async function reverseFuelGiftPaymentEffect(
     }
 
     const nextBalance = Number(
-      (Number(balanceAccount.balance_amount || 0) + Number(bulkFunding.amount || 0)).toFixed(2),
+      (
+        Number(balanceAccount.balance_amount || 0) +
+        Number(bulkFunding.amount || 0)
+      ).toFixed(2),
     );
 
     await databases.updateDocument(
@@ -3089,7 +3199,10 @@ async function reverseFuelGiftPaymentEffect(
     if (!rewardClientUserId && rewardClientPhone) {
       const clientUser = await findClientUserByPhone(rewardClientPhone);
 
-      if (clientUser && `${clientUser.status || ""}`.trim().toLowerCase() === "active") {
+      if (
+        clientUser &&
+        `${clientUser.status || ""}`.trim().toLowerCase() === "active"
+      ) {
         rewardClientUserId = clientUser.id;
         rewardClientName = clientUser.fullName || rewardClientName;
         rewardClientPhone = clientUser.phone || rewardClientPhone;
@@ -3137,7 +3250,7 @@ async function reverseFuelGiftPaymentEffect(
         giftDocument.notes,
         `Restored from POS reversal at ${reversedAt}.`,
       ),
-    }
+    },
   );
 
   await syncFuelGiftPurchaseByGiftCodeId({
@@ -3174,7 +3287,10 @@ async function reverseCustomerBalancePaymentEffect(
   let existingAccount = null;
 
   if (paymentFlow === "bulk-redeem") {
-    const bulkReferenceCode = extractReceiptNoteValue(receipt.notes, "Bulk reference");
+    const bulkReferenceCode = extractReceiptNoteValue(
+      receipt.notes,
+      "Bulk reference",
+    );
 
     existingAccount = await findCustomerBalanceAccount(databases, {
       accountType,
@@ -3184,7 +3300,8 @@ async function reverseCustomerBalancePaymentEffect(
     existingAccount = await findCustomerBalanceAccount(databases, {
       accountType,
       customerPhone:
-        receipt.customer_phone || extractReceiptNoteValue(receipt.notes, "Customer phone"),
+        receipt.customer_phone ||
+        extractReceiptNoteValue(receipt.notes, "Customer phone"),
       stationId: receipt.station_id || "",
     });
   }
@@ -3233,8 +3350,7 @@ async function reverseCustomerBalancePaymentEffect(
       receipt_number: receipt.receipt_number || "",
       station_id: receipt.station_id || "",
       station_name: receipt.station_name || "",
-      product_id:
-        updatedAccount.product_id || productBinding.productId || "",
+      product_id: updatedAccount.product_id || productBinding.productId || "",
       product_name:
         updatedAccount.product_name || productBinding.productName || "",
       movement_date: reversedAt,
@@ -3259,11 +3375,16 @@ async function reverseCustomerBalancePaymentEffect(
 
 function extractReceiptNoteValue(notes, label) {
   const escapedLabel = `${label || ""}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = `${notes || ""}`.match(new RegExp(`${escapedLabel}:\\s*([^\\n\\r]+)`, "i"));
+  const match = `${notes || ""}`.match(
+    new RegExp(`${escapedLabel}:\\s*([^\\n\\r]+)`, "i"),
+  );
   return match?.[1]?.trim() || "";
 }
 
-function appendReversalReceiptNotes(existingNotes, { reversedAt, reversedBy, reversalNote }) {
+function appendReversalReceiptNotes(
+  existingNotes,
+  { reversedAt, reversedBy, reversalNote },
+) {
   let notes = existingNotes || "";
 
   notes = appendLineNote(notes, `Reversed at: ${reversedAt}`);
@@ -3383,6 +3504,16 @@ function normalizeCategory(category, productName = "") {
   return "shop";
 }
 
+function getPosFieldLengthError(fields) {
+  const oversizedField = fields.find(
+    ([, value, maxLength]) => `${value || ""}`.length > maxLength,
+  );
+
+  return oversizedField
+    ? `${oversizedField[0]} must be ${oversizedField[2]} characters or fewer.`
+    : "";
+}
+
 function buildReceiptNumber({ saleDate = "", clientSaleId = "" } = {}) {
   const now = normalizeSaleDateInput(saleDate)
     ? new Date(normalizeSaleDateInput(saleDate))
@@ -3420,7 +3551,12 @@ function resolveSaleQuantity(item) {
   if (category === "fuel") {
     const amount = Number(item?.amount || 0);
 
-    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      !Number.isFinite(unitPrice) ||
+      unitPrice <= 0
+    ) {
       return 0;
     }
 
@@ -3441,14 +3577,17 @@ function resolveSaleLineTotal(item) {
     return Number.isFinite(amount) && amount > 0 ? roundCurrency(amount) : 0;
   }
 
-  return roundCurrency(Number(item?.unitPrice || 0) * Number(item?.quantity || 0));
+  return roundCurrency(
+    Number(item?.unitPrice || 0) * Number(item?.quantity || 0),
+  );
 }
 
 async function createSalesReceiptDocument(databases, receiptId, payload) {
   const databaseId = getServerAppwriteConfig().databaseId;
   const normalizedIdempotencyKey = `${payload?.idempotency_key || ""}`.trim();
   const payloadWithoutBlankIdempotencyKey =
-    normalizedIdempotencyKey || !Object.prototype.hasOwnProperty.call(payload, "idempotency_key")
+    normalizedIdempotencyKey ||
+    !Object.prototype.hasOwnProperty.call(payload, "idempotency_key")
       ? payload
       : Object.fromEntries(
           Object.entries(payload).filter(([key]) => key !== "idempotency_key"),
@@ -3480,7 +3619,9 @@ async function createSalesReceiptDocument(databases, receiptId, payload) {
     }
 
     if (
-      !isLegacyReceiptSchemaPaymentMethodCode(payloadWithoutBlankIdempotencyKey.payment_method) &&
+      !isLegacyReceiptSchemaPaymentMethodCode(
+        payloadWithoutBlankIdempotencyKey.payment_method,
+      ) &&
       isPaymentMethodValueConstraintError(errorMessage)
     ) {
       try {
@@ -3518,7 +3659,11 @@ async function createSalesReceiptDocument(databases, receiptId, payload) {
     }
 
     if (isMissingPaymentMethodMetadataError(errorMessage)) {
-      if (!isLegacyReceiptSchemaPaymentMethodCode(payloadWithoutBlankIdempotencyKey.payment_method)) {
+      if (
+        !isLegacyReceiptSchemaPaymentMethodCode(
+          payloadWithoutBlankIdempotencyKey.payment_method,
+        )
+      ) {
         throw new Error(
           "Custom payment methods need the latest database schema update before they can be saved.",
         );
@@ -3629,6 +3774,8 @@ function normalizeDateOnlyInput(value) {
 
 function buildReceiptNotes({
   customerPhone,
+  customerPhysicalAddress,
+  customerDigitalAddress,
   vehicleRegistrationNumber,
   companyOrOrganizationName,
   billableTo,
@@ -3645,6 +3792,14 @@ function buildReceiptNotes({
 
   if (customerPhone) {
     parts.push(`Customer phone: ${customerPhone}`);
+  }
+
+  if (customerPhysicalAddress) {
+    parts.push(`Physical address: ${customerPhysicalAddress}`);
+  }
+
+  if (customerDigitalAddress) {
+    parts.push(`Digital address: ${customerDigitalAddress}`);
   }
 
   if (vehicleRegistrationNumber) {
@@ -3689,7 +3844,7 @@ function buildReceiptNotes({
     parts.push(`Payment note: ${paymentNote}`);
   }
 
-  return parts.join("\n");
+  return parts.join("\n").slice(0, 2000);
 }
 
 function buildPaymentRecordNotes({
@@ -3738,6 +3893,8 @@ function buildPaymentRecordNotes({
 function buildCustomerBalanceAccountNotes({
   paymentFlow = "standard",
   creditDueDate = "",
+  customerPhysicalAddress = "",
+  customerDigitalAddress = "",
 } = {}) {
   if (paymentFlow === "coupon") {
     return "Coupon-linked customer balance account.";
@@ -3748,17 +3905,55 @@ function buildCustomerBalanceAccountNotes({
   }
 
   if (paymentFlow === "credit") {
-    return creditDueDate
-      ? `Customer credit account. Due date: ${creditDueDate}.`
-      : "Customer credit account.";
+    const parts = ["Customer credit account."];
+
+    if (creditDueDate) {
+      parts.push(`Due date: ${creditDueDate}.`);
+    }
+
+    if (customerPhysicalAddress) {
+      parts.push(`Physical address: ${customerPhysicalAddress}`);
+    }
+
+    if (customerDigitalAddress) {
+      parts.push(`Digital address: ${customerDigitalAddress}`);
+    }
+
+    return parts.join("\n").slice(0, 2000);
   }
 
   return "Customer balance account.";
 }
 
+function parseCreditAddressNotes(notes) {
+  const result = {
+    physicalAddress: "",
+    digitalAddress: "",
+  };
+
+  for (const line of `${notes || ""}`.split(/\r?\n/)) {
+    const normalizedLine = line.trim();
+
+    if (normalizedLine.startsWith("Physical address:")) {
+      result.physicalAddress = normalizedLine
+        .slice("Physical address:".length)
+        .trim();
+    } else if (normalizedLine.startsWith("Digital address:")) {
+      result.digitalAddress = normalizedLine
+        .slice("Digital address:".length)
+        .trim();
+    }
+  }
+
+  return result;
+}
+
 function serializeFuelGiftBulkFunding(allocations = []) {
   return allocations
-    .filter((allocation) => allocation?.referenceCode && Number(allocation?.amount || 0) > 0)
+    .filter(
+      (allocation) =>
+        allocation?.referenceCode && Number(allocation?.amount || 0) > 0,
+    )
     .map(
       (allocation) =>
         `${allocation.referenceCode}=${Number(allocation.amount || 0).toFixed(2)}`,
@@ -3800,7 +3995,9 @@ function parseFuelGiftRewardFundingAmount(value) {
 
 function buildFuelGiftFundingAuditNote(operation) {
   const parts = [];
-  const bulkFunding = serializeFuelGiftBulkFunding(operation.bulkAllocations || []);
+  const bulkFunding = serializeFuelGiftBulkFunding(
+    operation.bulkAllocations || [],
+  );
 
   if (bulkFunding) {
     parts.push(`Bulk funding applied: ${bulkFunding}.`);
@@ -3878,8 +4075,8 @@ function deriveBalanceProductCategory(items = []) {
 }
 
 function deriveSingleProductBinding(items = []) {
-  const normalizedItems = (Array.isArray(items) ? items : []).filter(
-    (item) => `${item?.productName || ""}`.trim(),
+  const normalizedItems = (Array.isArray(items) ? items : []).filter((item) =>
+    `${item?.productName || ""}`.trim(),
   );
   const productIds = Array.from(
     new Set(
@@ -3907,7 +4104,10 @@ function deriveSingleProductBinding(items = []) {
 function ensureFuelGiftMatchesSale(giftDocument, items, totalAmount) {
   const productBinding = deriveSingleProductBinding(items);
 
-  if (productBinding.hasMixedProducts || productBinding.productCategory !== "fuel") {
+  if (
+    productBinding.hasMixedProducts ||
+    productBinding.productCategory !== "fuel"
+  ) {
     throw new Error(
       "Fuel gift codes can only be redeemed for one fuel product at a time.",
     );
@@ -3931,11 +4131,19 @@ function ensureFuelGiftMatchesSale(giftDocument, items, totalAmount) {
     );
   }
 
-  const saleProductIdentity = normalizeProductIdentity(productBinding.productName);
-  const giftProductCode = normalizeProductIdentity(giftDocument?.product_code || "");
-  const giftProductName = normalizeProductIdentity(giftDocument?.product_name || "");
-  const matchesGiftCode = giftProductCode && saleProductIdentity === giftProductCode;
-  const matchesGiftName = giftProductName && saleProductIdentity === giftProductName;
+  const saleProductIdentity = normalizeProductIdentity(
+    productBinding.productName,
+  );
+  const giftProductCode = normalizeProductIdentity(
+    giftDocument?.product_code || "",
+  );
+  const giftProductName = normalizeProductIdentity(
+    giftDocument?.product_name || "",
+  );
+  const matchesGiftCode =
+    giftProductCode && saleProductIdentity === giftProductCode;
+  const matchesGiftName =
+    giftProductName && saleProductIdentity === giftProductName;
 
   if (!matchesGiftCode && !matchesGiftName) {
     throw new Error(
@@ -3952,11 +4160,15 @@ function ensureBulkBalanceMatchesSaleItems(account, productBinding) {
   }
 
   const accountProductId = `${account?.product_id || ""}`.trim();
-  const accountProductName = `${account?.product_name || ""}`.trim().toLowerCase();
+  const accountProductName = `${account?.product_name || ""}`
+    .trim()
+    .toLowerCase();
   const accountProductCategory = `${account?.product_category || ""}`
     .trim()
     .toLowerCase();
-  const saleProductName = `${productBinding.productName || ""}`.trim().toLowerCase();
+  const saleProductName = `${productBinding.productName || ""}`
+    .trim()
+    .toLowerCase();
 
   if (accountProductId && accountProductId !== productBinding.productId) {
     throw new Error(
@@ -3964,7 +4176,11 @@ function ensureBulkBalanceMatchesSaleItems(account, productBinding) {
     );
   }
 
-  if (!accountProductId && accountProductName && accountProductName !== saleProductName) {
+  if (
+    !accountProductId &&
+    accountProductName &&
+    accountProductName !== saleProductName
+  ) {
     throw new Error(
       `This bulk balance can only be redeemed for ${account.product_name || "its assigned product"}.`,
     );
@@ -3975,7 +4191,8 @@ function ensureBulkBalanceMatchesSaleItems(account, productBinding) {
     !accountProductName &&
     accountProductCategory &&
     accountProductCategory !== "all" &&
-    accountProductCategory !== `${productBinding.productCategory || ""}`.toLowerCase()
+    accountProductCategory !==
+      `${productBinding.productCategory || ""}`.toLowerCase()
   ) {
     throw new Error(
       `This bulk balance can only be redeemed for ${account.product_category}.`,
@@ -3998,11 +4215,7 @@ function buildCustomerBalanceReference({
     .replace(/[^0-9]+/g, "")
     .slice(-6);
   const typePrefix =
-    accountType === "credit"
-      ? "CRD"
-      : accountType === "coupon"
-        ? "CPN"
-        : "BLK";
+    accountType === "credit" ? "CRD" : accountType === "coupon" ? "CPN" : "BLK";
 
   return `${typePrefix}-${normalizedStationCode || "JAH"}-${normalizedPhone || "CUST"}`;
 }

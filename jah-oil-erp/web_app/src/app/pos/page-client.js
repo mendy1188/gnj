@@ -231,6 +231,8 @@ function buildReceiptHtml({
   cashierName,
   customerName,
   customerPhone,
+  customerPhysicalAddress,
+  customerDigitalAddress,
   vehicleRegistrationNumber,
   companyOrOrganizationName,
   billableTo,
@@ -240,6 +242,33 @@ function buildReceiptHtml({
   total,
   statusLabel,
 }) {
+  const detailRows = [
+    ["Cashier", cashierName || "POS Counter"],
+    ["Customer", customerName || "Walk-in Customer"],
+    ...(customerPhone ? [["Phone", customerPhone]] : []),
+    ...(customerPhysicalAddress
+      ? [["Physical Address", customerPhysicalAddress]]
+      : []),
+    ...(customerDigitalAddress
+      ? [["Digital Address", customerDigitalAddress]]
+      : []),
+    ...(vehicleRegistrationNumber
+      ? [["Vehicle", vehicleRegistrationNumber]]
+      : []),
+    ...(companyOrOrganizationName
+      ? [["Company / Org.", companyOrOrganizationName]]
+      : []),
+    ...(billableTo ? [["Billable To", billableTo]] : []),
+  ]
+    .map(
+      ([label, value]) => `
+        <tr>
+          <td>${escapeReceiptHtml(label)}</td>
+          <td>${escapeReceiptHtml(value)}</td>
+        </tr>
+      `,
+    )
+    .join("");
   const itemRows = (Array.isArray(items) ? items : [])
     .map(
       (item) => `
@@ -275,156 +304,234 @@ function buildReceiptHtml({
             color: #0f172a;
             margin: 0;
             padding: 24px;
-            background: #ffffff;
+            background: #f1f5f9;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .receipt {
-            max-width: 360px;
+            max-width: 400px;
             margin: 0 auto;
+            overflow: hidden;
+            border: 1px solid #dbe4f0;
+            border-radius: 18px;
+            background: #ffffff;
+            box-shadow: 0 18px 50px rgba(15, 23, 42, 0.12);
           }
-          .brand {
-            text-align: center;
-            margin-bottom: 18px;
+          .receipt-header {
+            padding: 24px;
+            background: #0f172a;
+            color: #ffffff;
           }
-          .brand h1 {
-            font-size: 18px;
+          .receipt-header .eyebrow {
+            color: #bae6fd;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+          }
+          .receipt-header h1 {
+            font-size: 24px;
+            line-height: 1.1;
             margin: 0;
+            margin-top: 8px;
           }
-          .brand p {
-            margin: 4px 0 0;
+          .receipt-header p {
+            margin: 8px 0 0;
+            font-size: 11px;
+            line-height: 1.5;
+            color: #cbd5e1;
+          }
+          .receipt-body {
+            padding: 20px;
+          }
+          .summary {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 12px;
+            padding: 13px 14px;
+            border: 1px solid #dbe4f0;
+            border-radius: 12px;
+            background: #f8fafc;
+          }
+          .summary-item:last-child {
+            text-align: right;
+          }
+          .summary-label,
+          .section-label {
+            display: block;
+            color: #64748b;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+          }
+          .summary-value {
+            display: block;
+            margin-top: 4px;
+            color: #0f172a;
             font-size: 12px;
-            color: #475569;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+          }
+          .section-label {
+            margin-top: 18px;
+            margin-bottom: 7px;
           }
           .meta,
           .totals {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 14px;
           }
           .meta td,
           .totals td {
-            padding: 4px 0;
-            font-size: 12px;
+            padding: 5px 0;
+            font-size: 11px;
             vertical-align: top;
+          }
+          .meta td:first-child {
+            width: 38%;
+            color: #64748b;
+          }
+          .meta td:last-child {
+            color: #1e293b;
+            font-weight: 600;
+            overflow-wrap: anywhere;
           }
           .items {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 18px;
+            border: 1px solid #dbe4f0;
+            border-radius: 10px;
           }
           .items th,
           .items td {
             border-bottom: 1px solid #e2e8f0;
-            padding: 8px 0;
-            font-size: 12px;
+            padding: 8px 6px;
+            font-size: 10px;
           }
           .items th {
-            color: #475569;
-            font-weight: 600;
+            color: #334155;
+            background: #eaf3ff;
+            font-weight: 700;
             text-align: left;
           }
-          .totals td:last-child,
-          .meta td:last-child {
+          .items th:first-child,
+          .items td:first-child {
+            padding-left: 9px;
+          }
+          .items th:last-child,
+          .items td:last-child {
+            padding-right: 9px;
+          }
+          .items tbody tr:last-child td {
+            border-bottom: 0;
+          }
+          .totals {
+            margin-top: 12px;
+          }
+          .totals td:last-child {
             text-align: right;
           }
+          .totals .grand-total td {
+            padding-top: 10px;
+            border-top: 1px solid #cbd5e1;
+            color: #0f172a;
+            font-size: 15px;
+            font-weight: 800;
+          }
           .status {
-            margin-top: 12px;
-            padding: 10px 12px;
+            margin-top: 14px;
+            padding: 10px 11px;
+            border: 1px solid #fde68a;
             border-radius: 10px;
-            background: #f8fafc;
-            font-size: 12px;
-            color: #334155;
+            background: #fffbeb;
+            font-size: 10px;
+            line-height: 1.45;
+            color: #92400e;
           }
           .footer {
-            margin-top: 18px;
+            margin-top: 20px;
+            padding-top: 14px;
+            border-top: 1px dashed #cbd5e1;
             text-align: center;
-            font-size: 11px;
+            font-size: 10px;
             color: #64748b;
+          }
+          @media print {
+            body {
+              padding: 0;
+              background: #ffffff;
+            }
+            .receipt {
+              max-width: none;
+              border: 0;
+              border-radius: 0;
+              box-shadow: none;
+            }
           }
         </style>
       </head>
       <body>
         <div class="receipt">
-          <div class="brand">
-            <h1>Jah Multi Industries</h1>
-            <p>Sales Receipt</p>
-          </div>
+          <header class="receipt-header">
+            <div class="eyebrow">JAH MULTI INDUSTRIES</div>
+            <h1>Sales Receipt</h1>
+            <p>${escapeReceiptHtml(stationName || "Station")} · ${escapeReceiptHtml(
+              formatReceiptDateTime(saleDate),
+            )}</p>
+          </header>
 
-          <table class="meta">
-            <tr>
-              <td>Receipt</td>
-              <td>${escapeReceiptHtml(receiptNumber)}</td>
-            </tr>
-            <tr>
-              <td>Date</td>
-              <td>${escapeReceiptHtml(formatReceiptDateTime(saleDate))}</td>
-            </tr>
-            <tr>
-              <td>Station</td>
-              <td>${escapeReceiptHtml(stationName || "—")}</td>
-            </tr>
-            <tr>
-              <td>Cashier</td>
-              <td>${escapeReceiptHtml(cashierName || "POS Counter")}</td>
-            </tr>
-            <tr>
-              <td>Customer</td>
-              <td>${escapeReceiptHtml(customerName || "Walk-in Customer")}</td>
-            </tr>
-            <tr>
-              <td>Phone</td>
-              <td>${escapeReceiptHtml(customerPhone || "—")}</td>
-            </tr>
-            <tr>
-              <td>Vehicle</td>
-              <td>${escapeReceiptHtml(vehicleRegistrationNumber || "—")}</td>
-            </tr>
-            <tr>
-              <td>Company / Org.</td>
-              <td>${escapeReceiptHtml(companyOrOrganizationName || "—")}</td>
-            </tr>
-            <tr>
-              <td>Billable To</td>
-              <td>${escapeReceiptHtml(billableTo || "—")}</td>
-            </tr>
-            <tr>
-              <td>Payment</td>
-              <td>${escapeReceiptHtml(formatReceiptPaymentMethod(paymentMethod))}</td>
-            </tr>
-          </table>
+          <div class="receipt-body">
+            <div class="summary">
+              <div class="summary-item">
+                <span class="summary-label">Receipt number</span>
+                <strong class="summary-value">${escapeReceiptHtml(receiptNumber)}</strong>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Payment</span>
+                <strong class="summary-value">${escapeReceiptHtml(
+                  formatReceiptPaymentMethod(paymentMethod),
+                )}</strong>
+              </div>
+            </div>
 
-          <table class="items">
-            <thead>
+            <div class="section-label">Sale details</div>
+            <table class="meta">
+              ${detailRows}
+            </table>
+
+            <div class="section-label">Items</div>
+            <table class="items">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th style="text-align:center;">Qty</th>
+                  <th style="text-align:right;">Price</th>
+                  <th style="text-align:right;">Total</th>
+                </tr>
+              </thead>
+              <tbody>${itemRows}</tbody>
+            </table>
+
+            <table class="totals">
               <tr>
-                <th>Item</th>
-                <th style="text-align:center;">Qty</th>
-                <th style="text-align:right;">Price</th>
-                <th style="text-align:right;">Total</th>
+                <td>Subtotal</td>
+                <td>${escapeReceiptHtml(formatCurrency(subtotal))}</td>
               </tr>
-            </thead>
-            <tbody>${itemRows}</tbody>
-          </table>
+              <tr class="grand-total">
+                <td>Total</td>
+                <td>${escapeReceiptHtml(formatCurrency(total))}</td>
+              </tr>
+            </table>
 
-          <table class="totals">
-            <tr>
-              <td>Subtotal</td>
-              <td>${escapeReceiptHtml(formatCurrency(subtotal))}</td>
-            </tr>
-            <tr>
-              <td style="font-weight: 700;">Total</td>
-              <td style="font-weight: 700;">${escapeReceiptHtml(
-                formatCurrency(total),
-              )}</td>
-            </tr>
-          </table>
+            ${
+              statusLabel
+                ? `<div class="status">${escapeReceiptHtml(statusLabel)}</div>`
+                : ""
+            }
 
-          ${
-            statusLabel
-              ? `<div class="status">${escapeReceiptHtml(statusLabel)}</div>`
-              : ""
-          }
-
-          <div class="footer">
-            Thank you for your business.
+            <div class="footer">
+              Thank you for your business.
+            </div>
           </div>
         </div>
       </body>
@@ -721,6 +828,12 @@ export default function PosPageClient({
   products = [],
   stations = [],
   paymentMethods = [],
+  allowedPaymentMethodCodes = null,
+  excludedPaymentMethodCodes = [],
+  pageTitle = "POS",
+  pageDescription = "",
+  saleChannel = "standard-pos",
+  allowPaymentMethodFallback = true,
   shellProps,
 }) {
   const session = shellProps?.session || null;
@@ -732,8 +845,12 @@ export default function PosPageClient({
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
-  const [vehicleRegistrationNumber, setVehicleRegistrationNumber] = useState("");
-  const [companyOrOrganizationName, setCompanyOrOrganizationName] = useState("");
+  const [customerPhysicalAddress, setCustomerPhysicalAddress] = useState("");
+  const [customerDigitalAddress, setCustomerDigitalAddress] = useState("");
+  const [vehicleRegistrationNumber, setVehicleRegistrationNumber] =
+    useState("");
+  const [companyOrOrganizationName, setCompanyOrOrganizationName] =
+    useState("");
   const [billableTo, setBillableTo] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [bulkReferenceCode, setBulkReferenceCode] = useState("");
@@ -754,13 +871,40 @@ export default function PosPageClient({
     const source =
       Array.isArray(paymentMethods) && paymentMethods.length > 0
         ? paymentMethods
-        : getDefaultPaymentMethods().filter((method) => method.isEnabled);
+        : allowPaymentMethodFallback
+          ? getDefaultPaymentMethods().filter((method) => method.isEnabled)
+          : [];
 
-    return source.map((method) => ({
-      code: `${method.code || ""}`.trim().toLowerCase(),
-      label: method.label || `${method.code || ""}`.trim(),
-    }));
-  }, [paymentMethods]);
+    const allowedCodes = Array.isArray(allowedPaymentMethodCodes)
+      ? new Set(
+          allowedPaymentMethodCodes.map((code) =>
+            `${code || ""}`.trim().toLowerCase(),
+          ),
+        )
+      : null;
+    const excludedCodes = new Set(
+      (Array.isArray(excludedPaymentMethodCodes)
+        ? excludedPaymentMethodCodes
+        : []
+      ).map((code) => `${code || ""}`.trim().toLowerCase()),
+    );
+
+    return source
+      .map((method) => ({
+        code: `${method.code || ""}`.trim().toLowerCase(),
+        label: method.label || `${method.code || ""}`.trim(),
+      }))
+      .filter(
+        (method) =>
+          (!allowedCodes || allowedCodes.has(method.code)) &&
+          !excludedCodes.has(method.code),
+      );
+  }, [
+    allowedPaymentMethodCodes,
+    allowPaymentMethodFallback,
+    excludedPaymentMethodCodes,
+    paymentMethods,
+  ]);
   const [paymentMethod, setPaymentMethod] = useState(
     availablePaymentMethods[0]?.code || "cash",
   );
@@ -928,7 +1072,8 @@ export default function PosPageClient({
     if (isFuelGiftLocked) {
       setSubmissionState({
         tone: "warning",
-        message: "Clear the applied fuel gift before changing the product selection.",
+        message:
+          "Clear the applied fuel gift before changing the product selection.",
       });
       return;
     }
@@ -1020,7 +1165,8 @@ export default function PosPageClient({
   const isFuelGiftLocked =
     isFuelGiftPaymentMethod(paymentMethod) &&
     Boolean(appliedFuelGift?.code) &&
-    normalizeFuelGiftLookupCode(appliedFuelGift.code) === normalizedFuelGiftCode;
+    normalizeFuelGiftLookupCode(appliedFuelGift.code) ===
+      normalizedFuelGiftCode;
   const isPaymentContextValid = useMemo(() => {
     if (isCouponPaymentMethod(paymentMethod)) {
       return Boolean(
@@ -1049,6 +1195,7 @@ export default function PosPageClient({
       return Boolean(
         customerName.trim() &&
           customerPhone.trim() &&
+          customerPhysicalAddress.trim() &&
           (!hasFuelItemsInCart || vehicleRegistrationNumber.trim()) &&
           billableTo.trim(),
       );
@@ -1062,6 +1209,7 @@ export default function PosPageClient({
     fuelGiftCode,
     appliedFuelGift,
     companyOrOrganizationName,
+    customerPhysicalAddress,
     customerName,
     customerPhone,
     hasFuelItemsInCart,
@@ -1085,7 +1233,8 @@ export default function PosPageClient({
     if (!isPaymentContextValid) {
       setSubmissionState({
         tone: "warning",
-        message: "Complete the required payment details before saving this sale.",
+        message:
+          "Complete the required payment details before saving this sale.",
       });
       return;
     }
@@ -1114,6 +1263,8 @@ export default function PosPageClient({
       customerName,
       customerPhone,
       customerEmail,
+      customerPhysicalAddress,
+      customerDigitalAddress,
       vehicleRegistrationNumber,
       companyOrOrganizationName,
       billableTo,
@@ -1122,6 +1273,7 @@ export default function PosPageClient({
       fuelGiftCode,
       creditDueDate,
       paymentNote,
+      saleChannel,
       saleDate,
       items: saleItems,
     };
@@ -1136,6 +1288,8 @@ export default function PosPageClient({
           "Gift Recipient"
         : customerName || "Walk-in Customer",
       customerPhone,
+      customerPhysicalAddress,
+      customerDigitalAddress,
       vehicleRegistrationNumber,
       companyOrOrganizationName,
       billableTo,
@@ -1169,13 +1323,17 @@ export default function PosPageClient({
           const result = await response.json().catch(() => null);
 
           if (!response.ok || !result?.success) {
-            throw new Error(result?.message || "Fuel gift sale could not be completed.");
+            throw new Error(
+              result?.message || "Fuel gift sale could not be completed.",
+            );
           }
 
           setCart([]);
           setCustomerName("");
           setCustomerPhone("");
           setCustomerEmail("");
+          setCustomerPhysicalAddress("");
+          setCustomerDigitalAddress("");
           setVehicleRegistrationNumber("");
           setCompanyOrOrganizationName("");
           setBillableTo("");
@@ -1195,7 +1353,6 @@ export default function PosPageClient({
             printReceipt({
               ...receiptContext,
               receiptNumber: result.receiptNumber || "",
-              statusLabel: "Sale synced successfully.",
             });
           }
 
@@ -1212,6 +1369,8 @@ export default function PosPageClient({
         setCustomerName("");
         setCustomerPhone("");
         setCustomerEmail("");
+        setCustomerPhysicalAddress("");
+        setCustomerDigitalAddress("");
         setVehicleRegistrationNumber("");
         setCompanyOrOrganizationName("");
         setBillableTo("");
@@ -1257,7 +1416,6 @@ export default function PosPageClient({
               ...receiptContext,
               receiptNumber:
                 queuedSaleResult.receiptNumber || provisionalReceiptNumber,
-              statusLabel: "Sale synced successfully.",
             });
           }
           return;
@@ -1293,8 +1451,8 @@ export default function PosPageClient({
 
   return (
     <DashboardPageShell
-      title="POS"
-      description=""
+      title={pageTitle}
+      description={pageDescription}
       {...shellProps}
       actions={
         <>
@@ -1458,6 +1616,11 @@ export default function PosPageClient({
                     </button>
                   );
                 })}
+                {availablePaymentMethods.length === 0 ? (
+                  <p className="text-xs font-medium text-rose-600">
+                    No payment method is enabled for this POS screen.
+                  </p>
+                ) : null}
               </div>
             </div>
 
@@ -1574,6 +1737,37 @@ export default function PosPageClient({
                 </div>
                 <div>
                   <label className="text-[10px] tracking-[0.2em] text-slate-400 uppercase">
+                    Digital Address
+                  </label>
+                  <input
+                    type="text"
+                    value={customerDigitalAddress}
+                    onChange={(event) =>
+                      setCustomerDigitalAddress(event.target.value)
+                    }
+                    maxLength={128}
+                    placeholder="Optional"
+                    className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition outline-none focus:border-sky-500"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-[10px] tracking-[0.2em] text-slate-400 uppercase">
+                    Physical Address
+                  </label>
+                  <textarea
+                    value={customerPhysicalAddress}
+                    onChange={(event) =>
+                      setCustomerPhysicalAddress(event.target.value)
+                    }
+                    maxLength={500}
+                    rows={2}
+                    required
+                    placeholder="Required"
+                    className="mt-1 block w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition outline-none focus:border-sky-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] tracking-[0.2em] text-slate-400 uppercase">
                     Credit Due Date
                   </label>
                   <div className="mt-1 flex items-center gap-2">
@@ -1589,7 +1783,10 @@ export default function PosPageClient({
                       >
                         {formatDateFieldLabel(creditDueDate)}
                       </span>
-                      <AppIcon name="clock" className="h-4 w-4 text-slate-400" />
+                      <AppIcon
+                        name="clock"
+                        className="h-4 w-4 text-slate-400"
+                      />
                     </button>
                     {creditDueDate ? (
                       <button
@@ -1664,7 +1861,9 @@ export default function PosPageClient({
                   <input
                     type="text"
                     value={bulkReferenceCode}
-                    onChange={(event) => setBulkReferenceCode(event.target.value)}
+                    onChange={(event) =>
+                      setBulkReferenceCode(event.target.value)
+                    }
                     placeholder="Required"
                     className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition outline-none focus:border-sky-500"
                   />
@@ -1715,7 +1914,7 @@ export default function PosPageClient({
                     className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition outline-none focus:border-sky-500"
                   />
                 </div>
-                <div className="sm:col-span-2 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 sm:col-span-2">
                   <button
                     type="button"
                     onClick={handleApplyFuelGiftCode}
@@ -1735,18 +1934,21 @@ export default function PosPageClient({
                   ) : null}
                 </div>
                 {appliedFuelGift ? (
-                  <div className="sm:col-span-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-3 text-sm text-emerald-800">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-3 text-sm text-emerald-800 sm:col-span-2">
                     <p className="font-semibold text-emerald-900">
-                      Gift ready: {appliedFuelGift.productName} · {formatCurrency(appliedFuelGift.amount)}
+                      Gift ready: {appliedFuelGift.productName} ·{" "}
+                      {formatCurrency(appliedFuelGift.amount)}
                     </p>
                     <p className="mt-1 text-xs text-emerald-700">
-                      Recipient: {appliedFuelGift.recipientName || "Recipient"} · Code: {appliedFuelGift.code}
+                      Recipient: {appliedFuelGift.recipientName || "Recipient"}{" "}
+                      · Code: {appliedFuelGift.code}
                     </p>
                   </div>
                 ) : null}
                 <div className="sm:col-span-2">
                   <p className="rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-700">
-                    Fuel gift redemptions must match the assigned fuel product and the exact gift value.
+                    Fuel gift redemptions must match the assigned fuel product
+                    and the exact gift value.
                   </p>
                 </div>
               </div>
@@ -1901,6 +2103,7 @@ export default function PosPageClient({
                     isPending ||
                     cart.length === 0 ||
                     !stationId ||
+                    availablePaymentMethods.length === 0 ||
                     !isPaymentContextValid
                   }
                   className={`w-full cursor-pointer rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${PRIMARY_ACTION_BUTTON_CLASS}`}

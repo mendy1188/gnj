@@ -345,6 +345,119 @@ function buildSalesSummaryRows(records) {
   );
 }
 
+function isCreditSaleRecord(record) {
+  const paymentMethodCode = normalizeString(
+    record?.paymentMethodCode,
+  ).toLowerCase();
+  const paymentMethod = normalizeString(record?.paymentMethod).toLowerCase();
+
+  return (
+    ["credit", "credit-sale"].includes(paymentMethodCode) ||
+    ["credit", "credit sale"].includes(paymentMethod) ||
+    paymentMethod.startsWith("credit (")
+  );
+}
+
+function roundReportNumber(value) {
+  return Number(Number(value || 0).toFixed(2));
+}
+
+function buildPaidCreditSplitLabel(paidSales, creditSales) {
+  const totalSales = Number(paidSales || 0) + Number(creditSales || 0);
+  const paidPercent =
+    totalSales > 0 ? (Number(paidSales || 0) / totalSales) * 100 : 0;
+  const creditPercent =
+    totalSales > 0 ? (Number(creditSales || 0) / totalSales) * 100 : 0;
+
+  return `${paidPercent.toFixed(1)}% | ${creditPercent.toFixed(1)}%`;
+}
+
+function buildSalesPaymentSummaryRows(records) {
+  const grouped = new Map();
+  const overall = {
+    product: "All products (overall)",
+    category: "All categories",
+    quantity: 0,
+    paid_sales: 0,
+    credit_sales: 0,
+    total_sales: 0,
+  };
+
+  (Array.isArray(records) ? records : []).forEach((record) => {
+    const product = normalizeString(record?.item) || "Unknown product";
+    const category = normalizeString(record?.type) || "Uncategorized";
+    const key = `${category.toLowerCase()}::${product.toLowerCase()}`;
+    const current = grouped.get(key) || {
+      product,
+      category,
+      quantity: 0,
+      paid_sales: 0,
+      credit_sales: 0,
+      total_sales: 0,
+    };
+    const quantity = Number(record?.quantity || 0);
+    const amount = Number(record?.amount || 0);
+
+    current.quantity += quantity;
+    current.total_sales += amount;
+    overall.quantity += quantity;
+    overall.total_sales += amount;
+
+    if (isCreditSaleRecord(record)) {
+      current.credit_sales += amount;
+      overall.credit_sales += amount;
+    } else {
+      current.paid_sales += amount;
+      overall.paid_sales += amount;
+    }
+
+    grouped.set(key, current);
+  });
+
+  const normalizeRow = (row) => {
+    const paidSales = roundReportNumber(row.paid_sales);
+    const creditSales = roundReportNumber(row.credit_sales);
+
+    return {
+      ...row,
+      quantity: roundReportNumber(row.quantity),
+      paid_sales: paidSales,
+      credit_sales: creditSales,
+      total_sales: roundReportNumber(paidSales + creditSales),
+      paid_credit_split: buildPaidCreditSplitLabel(paidSales, creditSales),
+    };
+  };
+  const productRows = Array.from(grouped.values())
+    .map(normalizeRow)
+    .sort(
+      (left, right) =>
+        Number(right.total_sales || 0) - Number(left.total_sales || 0) ||
+        `${left.product || ""}`.localeCompare(`${right.product || ""}`),
+    );
+
+  return [normalizeRow(overall), ...productRows];
+}
+
+function buildSalesPaymentSummaryCards(overallRow) {
+  return [
+    {
+      title: "Total Sales",
+      value: `D${Number(overallRow?.total_sales || 0).toLocaleString()}`,
+      icon: "📊",
+    },
+    {
+      title: "Paid Sales",
+      value: `D${Number(overallRow?.paid_sales || 0).toLocaleString()}`,
+      icon: "💳",
+    },
+    {
+      title: "Credit Sales",
+      value: `D${Number(overallRow?.credit_sales || 0).toLocaleString()}`,
+      icon: "🧾",
+    },
+  ];
+}
+
 function buildStationPerformanceRows(records) {
   const grouped = new Map();
 
@@ -1100,6 +1213,19 @@ function getPreviewColumns(reportKey) {
       { key: "total_quantity", label: "Quantity", format: "number" },
       { key: "total_amount", label: "Amount", format: "currency", pdfWidth: 14 },
     ],
+    "sales-payment-summary": [
+      { key: "product", label: "Product", pdfWidth: 20 },
+      { key: "category", label: "Category", pdfWidth: 11 },
+      { key: "quantity", label: "Quantity", format: "number", pdfWidth: 10 },
+      { key: "paid_sales", label: "Paid", format: "currency", pdfWidth: 13 },
+      { key: "credit_sales", label: "Credit", format: "currency", pdfWidth: 13 },
+      { key: "total_sales", label: "Total", format: "currency", pdfWidth: 13 },
+      {
+        key: "paid_credit_split",
+        label: "Paid | Credit",
+        pdfWidth: 12,
+      },
+    ],
     "commodity-sales": [
       {
         key: "sale_date",
@@ -1366,6 +1492,55 @@ async function buildSalesSummaryDataset(session, filters) {
     rows,
     filterOptions,
     summary: buildSummary(rows, ["total_amount", "total_quantity"]),
+  };
+}
+
+async function buildSalesPaymentSummaryDataset(session, filters) {
+  const sourceRecords = await getScopedSalesRecordsForRange(session, {
+    startDate: filters.fromDate,
+    endDate: filters.toDate,
+  });
+  const filterOptions = buildFilterOptionsFromRecords(sourceRecords, {
+    stationOptions: (record) => record.station,
+    categoryOptions: (record) => record.type,
+    productOptions: (record) => record.item,
+    cashierOptions: (record) => record.cashierName,
+  });
+  const filteredRecords = sourceRecords.filter(
+    (record) =>
+      isWithinDateRange(
+        record.saleDate || record.date,
+        filters.fromDate,
+        filters.toDate,
+      ) &&
+      matchesFilter(record.station, filters.station) &&
+      matchesFilter(record.type, filters.category) &&
+      matchesFilter(record.item, filters.product) &&
+      matchesFilter(record.cashierName, filters.cashier),
+  );
+  const rows = buildSalesPaymentSummaryRows(filteredRecords);
+  const overallRow = rows[0] || {};
+
+  return {
+    columns: getPreviewColumns("sales-payment-summary"),
+    rows,
+    filterOptions,
+    summary: {
+      rowCount: rows.length,
+      totals: {
+        total_sales: Number(overallRow.total_sales || 0),
+        paid_sales: Number(overallRow.paid_sales || 0),
+        credit_sales: Number(overallRow.credit_sales || 0),
+      },
+    },
+    summaryCards: buildSalesPaymentSummaryCards(overallRow),
+    chart: {
+      title: "Paid | Credit Sales",
+      data: [
+        { label: "Paid", value: Number(overallRow.paid_sales || 0) },
+        { label: "Credit", value: Number(overallRow.credit_sales || 0) },
+      ],
+    },
   };
 }
 
@@ -1870,6 +2045,11 @@ export async function buildReportDataset(reportKey, session, filters = {}) {
 
   if (report.key === "sales-summary") {
     dataset = await buildSalesSummaryDataset(session, normalizedFilters);
+  } else if (report.key === "sales-payment-summary") {
+    dataset = await buildSalesPaymentSummaryDataset(
+      session,
+      normalizedFilters,
+    );
   } else if (report.key === "commodity-sales") {
     dataset = await buildSalesTransactionDataset(
       session,

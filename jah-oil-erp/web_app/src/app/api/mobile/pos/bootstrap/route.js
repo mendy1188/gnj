@@ -57,7 +57,9 @@ export async function GET(request) {
       session,
       products: filterProductsForSession(products, session),
       stations: filterStationsForPosSession(stations, session),
-      paymentMethods,
+      paymentMethods: paymentMethods.filter(
+        (method) => `${method?.code || ""}`.trim().toLowerCase() !== "credit",
+      ),
     });
   } catch (error) {
     return NextResponse.json(

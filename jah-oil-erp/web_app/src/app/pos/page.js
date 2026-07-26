@@ -43,7 +43,11 @@ export default async function PosPage() {
     <PosPageClient
       products={filterProductsForSession(products, session)}
       stations={filterStationsForPosSession(stations, session)}
-      paymentMethods={paymentMethods}
+      paymentMethods={paymentMethods.filter(
+        (method) => `${method?.code || ""}`.trim().toLowerCase() !== "credit",
+      )}
+      excludedPaymentMethodCodes={["credit"]}
+      allowPaymentMethodFallback={false}
       shellProps={shellProps}
     />
   );

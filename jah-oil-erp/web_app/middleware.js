@@ -16,6 +16,8 @@ const protectedRoutes = [
   "/fuel-sales",
   "/commodities-sales",
   "/pos",
+  "/credit-sale",
+  "/balance-management",
   "/reports",
   "/admin",
   "/change-password",
@@ -32,7 +34,9 @@ export async function middleware(request) {
   );
 
   if (pathname === "/login" && isAuthenticated) {
-    const redirectPath = session.mustChangePassword ? "/change-password" : "/dashboard";
+    const redirectPath = session.mustChangePassword
+      ? "/change-password"
+      : "/dashboard";
     return NextResponse.redirect(new URL(redirectPath, request.url));
   }
 
@@ -83,6 +87,8 @@ export const config = {
     "/fuel-sales/:path*",
     "/commodities-sales/:path*",
     "/pos/:path*",
+    "/credit-sale/:path*",
+    "/balance-management/:path*",
     "/reports/:path*",
     "/admin/:path*",
     "/change-password",

@@ -110,6 +110,26 @@ const REPORT_DEFINITIONS = [
     filters: [...DATE_RANGE_FILTERS, STATION_FILTER, CATEGORY_FILTER],
   },
   {
+    key: "sales-payment-summary",
+    title: "Paid and Credit Sales Summary",
+    description:
+      "Total sales split into paid and credit sales, with the same split summarized by product.",
+    cadence: "Daily",
+    format: "CSV",
+    tone: "from-slate-50 to-white",
+    recommendedUse:
+      "Use this to reconcile total sales by original payment type and identify each product's paid and credit contribution.",
+    includes:
+      "Overall total, product, category, quantity, paid sales, credit sales, total sales, paid and credit percentages",
+    filters: [
+      ...DATE_RANGE_FILTERS,
+      STATION_FILTER,
+      CATEGORY_FILTER,
+      PRODUCT_FILTER,
+      CASHIER_FILTER,
+    ],
+  },
+  {
     key: "commodity-sales",
     title: "Commodity Sales Transactions",
     description:

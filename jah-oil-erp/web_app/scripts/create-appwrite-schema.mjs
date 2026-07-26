@@ -11,17 +11,25 @@ import {
   validateAdminConfig,
 } from "./lib/appwrite-admin.mjs";
 
+loadEnvFiles();
+
 const ATTRIBUTE_READY_STATES = new Set(["available", "ready"]);
 const ATTRIBUTE_FAILED_STATES = new Set(["failed", "stuck"]);
+const DEFAULT_ATTRIBUTE_WAIT_TIMEOUT_MS = 120000;
 const PRODUCT_IMAGES_BUCKET_ID =
   process.env.APPWRITE_PRODUCT_IMAGES_BUCKET_ID || "product-images";
-
-loadEnvFiles();
+const CREDIT_DOCUMENTS_BUCKET_ID =
+  process.env.APPWRITE_CREDIT_DOCUMENTS_BUCKET_ID || "credit-documents";
 
 const cliArgs = parseArgs(process.argv.slice(2), {
   booleanFlags: ["dry-run", "help"],
 });
 const config = createAdminConfig(cliArgs);
+const attributeWaitTimeoutMs = getPositiveInteger(
+  cliArgs.attributeWaitTimeoutMs ||
+    process.env.APPWRITE_SCHEMA_ATTRIBUTE_WAIT_TIMEOUT_MS,
+  DEFAULT_ATTRIBUTE_WAIT_TIMEOUT_MS,
+);
 
 if (cliArgs.help) {
   printUsage();
@@ -254,7 +262,10 @@ const schema = [
       datetimeAttribute("last_updated_at", { required: false }),
     ],
     indexes: [
-      uniqueIndex("inventory_station_product_unique", ["station_id", "product_id"]),
+      uniqueIndex("inventory_station_product_unique", [
+        "station_id",
+        "product_id",
+      ]),
       keyIndex("inventory_station_idx", ["station_id"]),
       keyIndex("inventory_product_idx", ["product_id"]),
       keyIndex("inventory_status_idx", ["status"]),
@@ -283,7 +294,10 @@ const schema = [
       keyIndex("incoming_stock_station_idx", ["station_id"]),
       keyIndex("incoming_stock_product_idx", ["product_id"]),
       keyIndex("incoming_stock_recorded_idx", ["recorded_at"]),
-      keyIndex("incoming_stock_station_recorded_idx", ["station_id", "recorded_at"]),
+      keyIndex("incoming_stock_station_recorded_idx", [
+        "station_id",
+        "recorded_at",
+      ]),
     ],
   },
   {
@@ -297,7 +311,12 @@ const schema = [
       datetimeAttribute("delivery_date"),
       floatAttribute("quantity"),
       stringAttribute("unit", 64),
-      enumAttribute("status", ["pending", "in_transit", "delivered", "cancelled"]),
+      enumAttribute("status", [
+        "pending",
+        "in_transit",
+        "delivered",
+        "cancelled",
+      ]),
       stringAttribute("supplier", 255, { required: false }),
       stringAttribute("reference_no", 128, { required: false }),
       stringAttribute("driver_name", 255, { required: false }),
@@ -328,9 +347,13 @@ const schema = [
       stringAttribute("payment_method", 64),
       stringAttribute("payment_method_code", 64, { required: false }),
       stringAttribute("payment_method_label", 128, { required: false }),
-      enumAttribute("payment_status", ["paid", "pending", "partially_paid", "voided"], {
-        required: false,
-      }),
+      enumAttribute(
+        "payment_status",
+        ["paid", "pending", "partially_paid", "voided"],
+        {
+          required: false,
+        },
+      ),
       enumAttribute("status", ["draft", "completed", "voided", "refunded"]),
       stringAttribute("cashier_name", 255, { required: false }),
       stringAttribute("customer_name", 255, { required: false }),
@@ -377,11 +400,16 @@ const schema = [
       keyIndex("receipt_items_category_idx", ["category"]),
       keyIndex("receipt_items_date_idx", ["sale_date"]),
       keyIndex("receipt_items_station_date_idx", ["station_id", "sale_date"]),
-      keyIndex("rit_station_item_date_idx", ["station_id", "product_name", "sale_date"]),
-      keyIndex(
-        "rit_station_category_date_idx",
-        ["station_id", "category", "sale_date"],
-      ),
+      keyIndex("rit_station_item_date_idx", [
+        "station_id",
+        "product_name",
+        "sale_date",
+      ]),
+      keyIndex("rit_station_category_date_idx", [
+        "station_id",
+        "category",
+        "sale_date",
+      ]),
     ],
   },
   {
@@ -421,19 +449,16 @@ const schema = [
       stringAttribute("product_name", 255),
       enumAttribute("category", ["fuel", "shop", "cement"]),
       datetimeAttribute("movement_date"),
-      enumAttribute(
-        "movement_type",
-        [
-          "opening",
-          "incoming",
-          "sale",
-          "adjustment",
-          "transfer_in",
-          "transfer_out",
-          "damage",
-          "reversal",
-        ],
-      ),
+      enumAttribute("movement_type", [
+        "opening",
+        "incoming",
+        "sale",
+        "adjustment",
+        "transfer_in",
+        "transfer_out",
+        "damage",
+        "reversal",
+      ]),
       floatAttribute("quantity_delta"),
       floatAttribute("previous_quantity"),
       floatAttribute("new_quantity"),
@@ -447,7 +472,11 @@ const schema = [
       keyIndex("imv_receipt_idx", ["receipt_id"]),
       keyIndex("imv_station_date_idx", ["station_id", "movement_date"]),
       keyIndex("imv_product_date_idx", ["product_id", "movement_date"]),
-      keyIndex("imv_station_prod_date", ["station_id", "product_id", "movement_date"]),
+      keyIndex("imv_station_prod_date", [
+        "station_id",
+        "product_id",
+        "movement_date",
+      ]),
       keyIndex("imv_type_date_idx", ["movement_type", "movement_date"]),
     ],
   },
@@ -514,6 +543,74 @@ const schema = [
       keyIndex("cbm_station_date_idx", ["station_id", "movement_date"]),
       keyIndex("cbm_type_date_idx", ["account_type", "movement_date"]),
       keyIndex("cbm_product_date_idx", ["product_id", "movement_date"]),
+    ],
+  },
+  {
+    id: "credit_guarantors",
+    name: "Credit Guarantors",
+    attributes: [
+      stringAttribute("account_id", 64),
+      stringAttribute("full_name", 255),
+      stringAttribute("phone", 32),
+      stringAttribute("email", 255, { required: false }),
+      stringAttribute("residential_address", 500, { required: false }),
+      stringAttribute("digital_address", 128, { required: false }),
+      stringAttribute("identity_type", 64),
+      stringAttribute("identity_number", 128, { required: false }),
+      stringAttribute("photo_bucket_id", 64, { required: false }),
+      stringAttribute("photo_file_id", 128, { required: false }),
+      stringAttribute("photo_file_name", 255, { required: false }),
+      stringAttribute("photo_mime_type", 128, { required: false }),
+      stringAttribute("identity_bucket_id", 64, { required: false }),
+      stringAttribute("identity_file_id", 128, { required: false }),
+      stringAttribute("identity_file_name", 255, { required: false }),
+      stringAttribute("identity_mime_type", 128, { required: false }),
+      stringAttribute("created_by_user_id", 64, { required: false }),
+      stringAttribute("created_by_name", 255, { required: false }),
+      datetimeAttribute("created_at"),
+      datetimeAttribute("updated_at"),
+    ],
+    indexes: [
+      keyIndex("cguar_account_idx", ["account_id"]),
+      keyIndex("cguar_name_idx", ["full_name"]),
+      keyIndex("cguar_updated_idx", ["updated_at"]),
+      keyIndex("cguar_account_updated_idx", ["account_id", "updated_at"]),
+    ],
+    obsoleteIndexes: ["cguar_account_unique"],
+  },
+  {
+    id: "credit_account_documents",
+    name: "Credit Account Documents",
+    attributes: [
+      stringAttribute("account_id", 64),
+      enumAttribute("document_category", [
+        "agreement",
+        "creditor_identity",
+        "collateral",
+      ]),
+      stringAttribute("identity_type", 64, { required: false }),
+      stringAttribute("title", 255),
+      stringAttribute("notes", 2000, { required: false }),
+      stringAttribute("collateral_info", 2000, { required: false }),
+      stringAttribute("bucket_id", 64),
+      stringAttribute("file_id", 128),
+      stringAttribute("file_name", 255),
+      stringAttribute("mime_type", 128, { required: false }),
+      integerAttribute("file_size"),
+      stringAttribute("uploaded_by_user_id", 64, { required: false }),
+      stringAttribute("uploaded_by_name", 255, { required: false }),
+      datetimeAttribute("uploaded_at"),
+    ],
+    indexes: [
+      keyIndex("cad_account_idx", ["account_id"]),
+      keyIndex("cad_account_category_idx", ["account_id", "document_category"]),
+      keyIndex("cad_uploaded_at_idx", ["uploaded_at"]),
+      keyIndex("cad_account_uploaded_idx", ["account_id", "uploaded_at"]),
+      keyIndex("cad_acct_category_uploaded", [
+        "account_id",
+        "document_category",
+        "uploaded_at",
+      ]),
     ],
   },
   {
@@ -715,7 +812,11 @@ const schema = [
       integerAttribute("transactions"),
     ],
     indexes: [
-      uniqueIndex("cds_date_station_cashier_unique", ["date", "station_id", "cashier_name"]),
+      uniqueIndex("cds_date_station_cashier_unique", [
+        "date",
+        "station_id",
+        "cashier_name",
+      ]),
       keyIndex("cds_date_idx", ["date"]),
       keyIndex("cds_station_idx", ["station_id"]),
       keyIndex("cds_cashier_idx", ["cashier_name"]),
@@ -739,7 +840,11 @@ const schema = [
       integerAttribute("transactions"),
     ],
     indexes: [
-      uniqueIndex("spds_date_stat_prod_uq", ["date", "station_id", "product_name"]),
+      uniqueIndex("spds_date_stat_prod_uq", [
+        "date",
+        "station_id",
+        "product_name",
+      ]),
       keyIndex("spds_date_idx", ["date"]),
       keyIndex("spds_station_idx", ["station_id"]),
       keyIndex("spds_product_idx", ["product_name"]),
@@ -880,7 +985,12 @@ const schema = [
       stringAttribute("station_id", 64, { required: false }),
       stringAttribute("station_name", 255, { required: false }),
       enumAttribute("direction", ["credit", "debit"]),
-      enumAttribute("movement_type", ["earn", "redeem", "adjustment", "reversal"]),
+      enumAttribute("movement_type", [
+        "earn",
+        "redeem",
+        "adjustment",
+        "reversal",
+      ]),
       floatAttribute("amount_delta"),
       floatAttribute("balance_after"),
       stringAttribute("actor_user_id", 64, { required: false }),
@@ -976,6 +1086,18 @@ const storageBuckets = [
     encryption: true,
     antivirus: true,
   },
+  {
+    id: CREDIT_DOCUMENTS_BUCKET_ID,
+    name: "Credit Documents",
+    permissions: [],
+    fileSecurity: false,
+    enabled: true,
+    maximumFileSize: 10 * 1024 * 1024,
+    allowedFileExtensions: ["png", "jpg", "jpeg", "webp", "pdf", "doc", "docx"],
+    compression: "gzip",
+    encryption: true,
+    antivirus: true,
+  },
 ];
 
 main().catch((error) => {
@@ -995,7 +1117,9 @@ async function main() {
   if (config.dryRun) {
     console.log("Dry run only. No Appwrite API requests will be sent.");
     schema.forEach((collection) => {
-      console.log(`- ${collection.id}: ${collection.attributes.length} attributes, ${collection.indexes.length} indexes`);
+      console.log(
+        `- ${collection.id}: ${collection.attributes.length} attributes, ${collection.indexes.length} indexes`,
+      );
     });
     storageBuckets.forEach((bucket) => {
       console.log(`- storage bucket ${bucket.id}: ${bucket.name}`);
@@ -1010,11 +1134,41 @@ async function main() {
   for (const collection of schema) {
     await ensureCollection(collection);
 
-    for (const attribute of collection.attributes) {
-      await ensureAttribute(collection.id, attribute);
+    for (const indexKey of collection.obsoleteIndexes || []) {
+      await removeIndexIfExists(collection.id, indexKey);
     }
 
-    await waitForAttributes(collection.id, collection.attributes.map((attribute) => attribute.key));
+    const existingAttributes = new Map(
+      (await listCollectionAttributes(collection.id)).map((attribute) => [
+        attribute.key,
+        attribute,
+      ]),
+    );
+
+    for (const attribute of collection.attributes) {
+      const existingAttribute = existingAttributes.get(attribute.key);
+
+      if (
+        existingAttribute &&
+        ATTRIBUTE_READY_STATES.has(existingAttribute.status)
+      ) {
+        console.log(
+          `  Attribute already exists: ${collection.id}.${attribute.key}`,
+        );
+        continue;
+      }
+
+      if (existingAttribute) {
+        assertAttributeHasNotFailed(collection.id, existingAttribute);
+        console.log(
+          `  Waiting for existing attribute: ${collection.id}.${attribute.key} (${existingAttribute.status || "unknown"})`,
+        );
+      } else {
+        await ensureAttribute(collection.id, attribute);
+      }
+
+      await waitForAttributes(collection.id, [attribute.key]);
+    }
 
     for (const index of collection.indexes) {
       await ensureIndex(collection.id, index);
@@ -1071,6 +1225,7 @@ Optional flags:
   --requestRetries <number>
   --requestRetryDelayMs <number>
   --requestTimeoutMs <number>
+  --attributeWaitTimeoutMs <number>
   --dry-run
   --help
 `);
@@ -1222,7 +1377,9 @@ async function ensureAttribute(collectionId, attribute) {
     console.log(`  Added attribute: ${collectionId}.${attribute.key}`);
   } catch (error) {
     if (isAlreadyExistsError(error)) {
-      console.log(`  Attribute already exists: ${collectionId}.${attribute.key}`);
+      console.log(
+        `  Attribute already exists: ${collectionId}.${attribute.key}`,
+      );
       return;
     }
 
@@ -1230,17 +1387,41 @@ async function ensureAttribute(collectionId, attribute) {
   }
 }
 
-async function waitForAttributes(collectionId, keys, timeoutMs = 120000) {
+async function listCollectionAttributes(collectionId) {
+  const response = await request(
+    config,
+    `/databases/${config.databaseId}/collections/${collectionId}/attributes`,
+  );
+
+  return Array.isArray(response.attributes) ? response.attributes : [];
+}
+
+function assertAttributeHasNotFailed(collectionId, attribute) {
+  if (!ATTRIBUTE_FAILED_STATES.has(attribute?.status)) {
+    return;
+  }
+
+  const errorDetails = `${attribute?.error || ""}`.trim();
+
+  throw new Error(
+    `Attribute ${collectionId}.${attribute.key} entered failed state: ${attribute.status}${errorDetails ? ` (${errorDetails})` : ""}`,
+  );
+}
+
+async function waitForAttributes(
+  collectionId,
+  keys,
+  timeoutMs = attributeWaitTimeoutMs,
+) {
   const deadline = Date.now() + timeoutMs;
+  let lastPendingSummary = "";
 
   while (Date.now() < deadline) {
-    const response = await request(
-      config,
-      `/databases/${config.databaseId}/collections/${collectionId}/attributes`,
-    );
-    const attributes = response.attributes || [];
+    const attributes = await listCollectionAttributes(collectionId);
 
-    const relevantAttributes = attributes.filter((attribute) => keys.includes(attribute.key));
+    const relevantAttributes = attributes.filter((attribute) =>
+      keys.includes(attribute.key),
+    );
     const statuses = new Map(
       relevantAttributes.map((attribute) => [attribute.key, attribute.status]),
     );
@@ -1249,28 +1430,74 @@ async function waitForAttributes(collectionId, keys, timeoutMs = 120000) {
       return;
     }
 
-    for (const [key, status] of statuses.entries()) {
-      if (ATTRIBUTE_FAILED_STATES.has(status)) {
-        throw new Error(`Attribute ${collectionId}.${key} entered failed state: ${status}`);
-      }
+    for (const attribute of relevantAttributes) {
+      assertAttributeHasNotFailed(collectionId, attribute);
+    }
+
+    const pendingSummary = keys
+      .filter((key) => !ATTRIBUTE_READY_STATES.has(statuses.get(key)))
+      .map((key) => {
+        const attribute = relevantAttributes.find(
+          (candidate) => candidate.key === key,
+        );
+        const status = attribute?.status || "missing";
+        const errorDetails = `${attribute?.error || ""}`.trim();
+        return `${key}=${status}${errorDetails ? ` (${errorDetails})` : ""}`;
+      })
+      .join(", ");
+
+    if (pendingSummary && pendingSummary !== lastPendingSummary) {
+      console.log(`  Waiting: ${collectionId} (${pendingSummary})`);
+      lastPendingSummary = pendingSummary;
     }
 
     await sleep(1500);
   }
 
-  throw new Error(`Timed out waiting for attributes in collection ${collectionId}`);
+  throw new Error(
+    `Timed out after ${timeoutMs}ms waiting for ${collectionId}: ${lastPendingSummary || keys.join(", ")}. If an attribute remains in "processing" with an unchanged $updatedAt value, remove only that stuck attribute in Appwrite and rerun this script; attributes are now created one at a time.`,
+  );
+}
+
+function getPositiveInteger(value, fallback) {
+  const parsedValue = Number.parseInt(`${value || ""}`, 10);
+
+  return Number.isFinite(parsedValue) && parsedValue > 0
+    ? parsedValue
+    : fallback;
 }
 
 async function ensureIndex(collectionId, index) {
   try {
-    await request(config, `/databases/${config.databaseId}/collections/${collectionId}/indexes`, {
-      method: "POST",
-      body: index,
-    });
+    await request(
+      config,
+      `/databases/${config.databaseId}/collections/${collectionId}/indexes`,
+      {
+        method: "POST",
+        body: index,
+      },
+    );
     console.log(`  Added index: ${collectionId}.${index.key}`);
   } catch (error) {
     if (isAlreadyExistsError(error)) {
       console.log(`  Index already exists: ${collectionId}.${index.key}`);
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function removeIndexIfExists(collectionId, indexKey) {
+  try {
+    await request(
+      config,
+      `/databases/${config.databaseId}/collections/${collectionId}/indexes/${indexKey}`,
+      { method: "DELETE" },
+    );
+    console.log(`  Removed obsolete index: ${collectionId}.${indexKey}`);
+  } catch (error) {
+    if (error.status === 404) {
       return;
     }
 
