@@ -1,0 +1,70 @@
+.gal-gallery, .cmp-comparison { color: #262923; }
+.gal-gallery button, .cmp-comparison button { font: inherit; }
+.gal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.25rem 1.5rem; }
+.gal-item, .gal-full-figure, .cmp-full-figure { margin: 0; min-width: 0; }
+.gal-item:first-child:nth-last-child(odd) { grid-column: 1 / -1; }
+.gal-open { position: relative; display: block; width: 100%; padding: 0; overflow: hidden; border: 0; background: #eeeae0; color: #243b18; cursor: zoom-in; }
+.gal-open img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; transition: transform 350ms ease; }
+.gal-item:first-child:nth-last-child(odd) .gal-open img { aspect-ratio: 16 / 9; }
+.gal-open:hover img { transform: scale(1.025); }
+.gal-expand { position: absolute; right: 1rem; bottom: 1rem; display: grid; place-items: center; width: 2.5rem; height: 2.5rem; background: #faf8f2; border-radius: 50%; }
+.gal-caption { margin-top: .8rem; color: #5a6052; line-height: 1.6; font-size: .9rem; }
+.gal-open:focus-visible, .gal-dialog button:focus-visible, .cmp-view-button:focus-visible { outline: 3px solid #9b7739; outline-offset: 5px; }
+.gal-dialog { position: fixed; inset: 0; width: min(1100px, calc(100vw - 3rem)); max-width: none; max-height: calc(100dvh - 3rem); margin: auto; padding: 0; border: 1px solid #e1dccf; overflow: auto; background: #faf8f2; color: #262923; }
+.gal-dialog::backdrop { background: rgb(15 23 13 / 88%); }
+.gal-viewer { padding: 1rem 1.5rem 1.5rem; }
+.gal-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.gal-counter { margin: 0; font-size: .8rem; letter-spacing: .07em; text-transform: uppercase; color: #5a6052; }
+.gal-icon-button { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 1px solid #d7d9cc; border-radius: 50%; color: #243b18; background: transparent; cursor: pointer; }
+.gal-icon-button:hover { background: #e9edde; }
+.gal-full-image { display: block; margin-inline: auto; width: 100%; height: min(66dvh, 750px); object-fit: contain; }
+.gal-full-caption { padding-top: 1rem; line-height: 1.5; font-size: .9rem; text-align: center; }
+.gal-navigation { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-top: 1.25rem; }
+.gal-nav-button { display: inline-flex; align-items: center; gap: .6rem; min-height: 44px; padding: .5rem .75rem; border: 0; background: transparent; color: #243b18; cursor: pointer; }
+.gal-nav-button:hover { background: #e9edde; }
+.gal-keyboard-hint { margin: 0; font-size: .75rem; color: #636858; }
+.cmp-comparison { margin-block: 2.5rem; }
+.cmp-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.5rem; }
+.cmp-title { margin: 0; font-family: var(--font-heading, Georgia), serif; font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 400; line-height: 1.25; color: #243b18; }
+.cmp-view-options { display: inline-flex; flex-shrink: 0; gap: .25rem; padding: .25rem; border: 1px solid #d7d9cc; }
+.cmp-view-button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 44px; padding: .6rem .9rem; border: 0; background: transparent; color: #243b18; font-size: .85rem !important; cursor: pointer; }
+.cmp-view-button[aria-pressed="true"] { background: #243b18; color: #faf8f2; }
+.cmp-view-button[aria-pressed="false"]:hover { background: #e9edde; }
+.cmp-stage { position: relative; aspect-ratio: 4 / 3; overflow: hidden; background: #eeeae0; isolation: isolate; }
+.cmp-stage:focus-within { outline: 3px solid #9b7739; outline-offset: 5px; }
+.cmp-slide-photo { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cmp-before-layer { position: absolute; inset: 0; }
+.cmp-photo-label { position: absolute; top: 1rem; left: 1rem; display: inline-block; padding: .5rem .85rem; background: #faf8f2; color: #243b18; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; line-height: 1.2; }
+.cmp-label-after { left: auto; right: 1rem; }
+.cmp-divider { position: absolute; top: 0; bottom: 0; width: 2px; transform: translateX(-50%); background: #faf8f2; pointer-events: none; }
+.cmp-grip { position: absolute; top: 50%; left: 50%; display: grid; place-items: center; width: 48px; height: 48px; transform: translate(-50%, -50%); border-radius: 50%; background: #faf8f2; color: #243b18; box-shadow: 0 1px 5px rgb(0 0 0 / 12%); }
+.cmp-range { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; touch-action: pan-y; }
+.cmp-slider-details { margin-top: 1rem; }
+.cmp-slider-details > p { margin: 0; color: #636858; font-size: .8rem; line-height: 1.6; }
+.cmp-caption-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; margin-top: 1rem; }
+.cmp-caption-pair p { margin: 0; font-size: .9rem; line-height: 1.6; }
+.cmp-caption-pair strong { display: block; margin-bottom: .3rem; color: #243b18; font-weight: 600; }
+.cmp-full-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 1.5rem; }
+.cmp-full-photo-wrap { position: relative; background: #eeeae0; }
+.cmp-full-photo-wrap img { display: block; width: 100%; height: auto; }
+.cmp-full-caption { display: flex; flex-direction: column; gap: .3rem; padding-top: .85rem; line-height: 1.6; font-size: .9rem; color: #5a6052; }
+.cmp-stage-name { color: #243b18; font-weight: 600; }
+@media (max-width: 640px) {
+  .gal-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+  .gal-item:first-child:nth-last-child(odd) .gal-open img { aspect-ratio: 4 / 3; }
+  .gal-dialog { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }
+  .gal-viewer { padding: .75rem; }
+  .gal-full-image { height: min(62dvh, 650px); }
+  .gal-keyboard-hint { display: none; }
+  .cmp-heading-row { flex-direction: column; align-items: flex-start; gap: 1rem; }
+  .cmp-full-grid, .cmp-caption-pair { grid-template-columns: 1fr; }
+  .cmp-view-options { max-width: 100%; }
+  .cmp-view-button { padding-inline: .7rem; }
+  .cmp-photo-label { top: .75rem; left: .75rem; padding: .4rem .6rem; font-size: .7rem; }
+  .cmp-label-after { left: auto; right: .75rem; }
+  .cmp-grip { width: 42px; height: 42px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gal-open img { transition: none; }
+  .gal-open:hover img { transform: none; }
+}
