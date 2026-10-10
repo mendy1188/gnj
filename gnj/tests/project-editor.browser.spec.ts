@@ -139,12 +139,30 @@ test('uploads at most two videos, previews them, and frees removed slots only af
   const renewalGate = new Promise<void>(resolve => { finishRenewal = resolve; });
   const renewalStarted = new Promise<void>(resolve => { markRenewalStarted = resolve; });
   await page.route('**/api/admin/video-uploads', async route => {
-    expect(route.request().method()).toBe('POST');
-    expect(route.request().postDataBuffer()?.toString()).toContain(project.id);
-    const video = videos[uploadCount++];
+    const payload = route.request().postDataJSON();
+    expect(payload.projectId).toBe(project.id);
+    expect(route.request().headers()['content-type']).toContain('application/json');
+    expect(route.request().postDataBuffer()!.length).toBeLessThan(1024);
+    if (route.request().method() === 'POST') {
+      const video = videos[uploadCount];
+      await route.fulfill({ json: { upload: { id: video.id, path: video.path, signedUrl: `https://video-upload.example/${video.id}` } } });
+    } else {
+      expect(route.request().method()).toBe('PATCH');
+      const video = videos.find(video => video.id === payload.id)!;
+      storedVideos.push(video);
+      await route.fulfill({ json: { video } });
+    }
+  });
+  await page.route('https://video-upload.example/**', async route => {
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'PUT', 'Access-Control-Allow-Headers': 'x-upsert,content-type' } }); return;
+    }
+    expect(route.request().method()).toBe('PUT');
+    expect(route.request().headers()['x-upsert']).toBe('false');
+    expect(route.request().postDataBuffer()!.length).toBeGreaterThan(5 * 1024 * 1024);
+    uploadCount++;
     if (uploadCount === 1) await firstUploadGate;
-    storedVideos.push(video);
-    await route.fulfill({ json: { video } });
+    await route.fulfill({ json: {}, headers: { 'Access-Control-Allow-Origin': '*' } });
   });
   await page.route(`**/api/admin/projects/${project.id}`, async route => {
     if (route.request().method() === 'PATCH') {
@@ -159,8 +177,8 @@ test('uploads at most two videos, previews them, and frees removed slots only af
   });
 
   await page.goto(baseURL);
-  const first = { name: 'walkthrough.mp4', mimeType: 'video/mp4', buffer: Buffer.from('test video') };
-  const second = { name: 'finished.webm', mimeType: 'video/webm', buffer: Buffer.from('test video') };
+  const first = { name: 'walkthrough.mp4', mimeType: 'video/mp4', buffer: Buffer.alloc(6 * 1024 * 1024) };
+  const second = { name: 'finished.webm', mimeType: 'video/webm', buffer: Buffer.alloc(6 * 1024 * 1024) };
   await page.locator('#admin-video-upload').setInputFiles([first, second, first]);
   await expect(page.getByRole('alert')).toContainText('up to two videos');
   expect(uploadCount).toBe(0);
@@ -223,8 +241,19 @@ test('validates video files and keeps failed uploads recoverable', async ({ page
   let uploadCount = 0;
   await page.route(`**/api/admin/projects/${project.id}`, route => route.fulfill({ json: { project } }));
   await page.route('**/api/admin/video-uploads', async route => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({ json: { upload: { id: videos[0].id, path: videos[0].path, signedUrl: 'https://video-upload.example/retry' } } });
+    } else {
+      expect(route.request().method()).toBe('PATCH');
+      await route.fulfill({ json: { video: videos[0] } });
+    }
+  });
+  await page.route('https://video-upload.example/**', async route => {
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'PUT', 'Access-Control-Allow-Headers': 'x-upsert,content-type' } }); return;
+    }
     uploadCount++;
-    await route.fulfill(uploadCount === 1 ? { status: 400, json: { error: 'This video could not be processed. Choose another file.' } } : { json: { video: videos[0] } });
+    await route.fulfill(uploadCount === 1 ? { status: 413, body: 'Request Entity Too Large', headers: { 'Access-Control-Allow-Origin': '*' } } : { json: {}, headers: { 'Access-Control-Allow-Origin': '*' } });
   });
   await page.goto(baseURL);
   await page.locator('#admin-video-upload').setInputFiles({ name: 'unsupported.mov', mimeType: 'video/quicktime', buffer: Buffer.from('test video') });
@@ -241,7 +270,7 @@ test('validates video files and keeps failed uploads recoverable', async ({ page
 
   const file = { name: 'walkthrough.mp4', mimeType: 'video/mp4', buffer: Buffer.from('test video') };
   await page.locator('#admin-video-upload').setInputFiles(file);
-  await expect(page.getByRole('alert')).toContainText('could not be processed');
+  await expect(page.getByRole('alert')).toContainText('no larger than 50 MB');
   await expect(page.getByRole('button', { name: 'Choose videos' })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Save draft' })).toBeEnabled();
   await expect(page.locator('.admin-video-editor')).toHaveCount(0);

@@ -168,10 +168,15 @@ export function ProjectEditor({ initialProject, navigationGuard, onClose, onSave
     setUploads(current => current.filter(upload => upload.id !== id));
   }
 
-  function uploadVideo(item: VideoUploadItem): Promise<ProjectVideo> {
-    return new Promise((resolve, reject) => {
+  async function uploadVideo(item: VideoUploadItem): Promise<ProjectVideo> {
+    const { upload } = await adminRequest<{ upload: { id: string; path: string; signedUrl: string } }>('/api/admin/video-uploads', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: project.id, contentType: item.file.type, size: item.file.size }),
+    });
+    await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/admin/video-uploads');
+      xhr.open('PUT', upload.signedUrl);
+      xhr.setRequestHeader('x-upsert', 'false');
       xhr.timeout = 300000;
       xhr.upload.onprogress = event => {
         if (event.lengthComputable) setVideoUploads(current => current.map(upload => upload.id === item.id ? { ...upload, progress: Math.round(event.loaded / event.total * 100) } : upload));
@@ -179,16 +184,23 @@ export function ProjectEditor({ initialProject, navigationGuard, onClose, onSave
       xhr.onerror = () => reject(new Error('Connection lost. Check your connection and try this video again.'));
       xhr.ontimeout = () => reject(new Error('This upload took too long. Please try again.'));
       xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) { resolve(); return; }
+        if (xhr.status === 413) { reject(new Error('Choose a video no larger than 50 MB.')); return; }
+        if (xhr.status === 401 || xhr.status === 403) { reject(new Error('The upload permission expired. Please choose this video again.')); return; }
         try {
           const result = JSON.parse(xhr.responseText);
-          if (xhr.status >= 200 && xhr.status < 300 && result.video) resolve(result.video);
-          else reject(new Error(result.error || 'Could not upload this video.'));
-        } catch { reject(new Error('Could not upload this video. Please try again.')); }
+          reject(new Error(result.message || result.error || 'Video storage could not accept this file. Please try again.'));
+        } catch { reject(new Error('Video storage could not accept this file. Please try again.')); }
       };
       const data = new FormData();
-      data.append('file', item.file); data.append('projectId', project.id);
+      data.append('cacheControl', '300'); data.append('', item.file);
       xhr.send(data);
     });
+    const { video } = await adminRequest<{ video: ProjectVideo }>('/api/admin/video-uploads', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: project.id, id: upload.id, contentType: item.file.type }),
+    });
+    return video;
   }
 
   async function uploadVideos(files: File[]) {
