@@ -6,9 +6,24 @@ import { isSupabaseConfigured, PROJECT_BUCKET, PROJECT_VIDEO_BUCKET, SIGNED_URL_
 import { createPublicSupabaseClient } from '@/lib/supabase/server';
 import { requireAdmin } from './auth';
 import { HttpError } from './http';
+import { isMissingProjectVideos } from './video-schema';
 
-type ProjectRow = Omit<Project, 'images' | 'videos'> & { images: Omit<ProjectImage, 'url'>[]; videos: Omit<ProjectVideo, 'url'>[] };
-const selection = 'id, slug, title, category, description, location, published, featured, sort_order, cover_image_id, created_at, updated_at, images:project_images!project_images_project_id_fkey(id, path, alt, caption, sort_order), videos:project_videos(id, path, caption, sort_order), comparisons:project_comparisons(id, before_id, after_id, label, aligned)';
+type ProjectRow = Omit<Project, 'images' | 'videos' | 'video_uploads_enabled'> & { images: Omit<ProjectImage, 'url'>[] };
+type VideoRow = Omit<ProjectVideo, 'url'> & { project_id: string };
+const selection = 'id, slug, title, category, description, location, published, featured, sort_order, cover_image_id, created_at, updated_at, images:project_images!project_images_project_id_fkey(id, path, alt, caption, sort_order), comparisons:project_comparisons(id, before_id, after_id, label, aligned)';
+
+async function loadProjectVideos(client: SupabaseClient, projectIds: string[]) {
+  if (!projectIds.length) return { enabled: true, videos: [] as VideoRow[] };
+  // Each project has at most two videos. Small batches avoid URL and row limits.
+  const batches: string[][] = [];
+  for (let index = 0; index < projectIds.length; index += 100) batches.push(projectIds.slice(index, index + 100));
+  const results = await Promise.all(batches.map(ids => client.from('project_videos').select('id, project_id, path, caption, sort_order').in('project_id', ids)));
+  // An app deployment may arrive before its additive database migration.
+  // Only the missing video table permits fallback; other failures remain errors.
+  if (results.every(result => result.error && isMissingProjectVideos(result.error))) return { enabled: false, videos: [] as VideoRow[] };
+  if (results.some(result => result.error)) throw new HttpError(503, 'Project videos could not be loaded. Please try again.');
+  return { enabled: true, videos: results.flatMap(result => result.data || []) as VideoRow[] };
+}
 
 async function signProjectMedia(client: SupabaseClient, bucket: string, paths: string[], label: string) {
   const signedUrls = new Map<string, string>();
@@ -24,14 +39,16 @@ async function signProjectMedia(client: SupabaseClient, bucket: string, paths: s
 }
 
 async function hydrateProjects(client: SupabaseClient, rows: ProjectRow[]): Promise<Project[]> {
+  const { enabled, videos } = await loadProjectVideos(client, rows.map(row => row.id));
   const [signedUrls, videoUrls] = await Promise.all([
     signProjectMedia(client, PROJECT_BUCKET, [...new Set(rows.flatMap((row) => row.images.map((image) => image.path)))], 'photographs'),
-    signProjectMedia(client, PROJECT_VIDEO_BUCKET, [...new Set(rows.flatMap((row) => row.videos.map((video) => video.path)))], 'videos'),
+    signProjectMedia(client, PROJECT_VIDEO_BUCKET, [...new Set(videos.map(video => video.path))], 'videos'),
   ]);
   return rows.map((row) => ({
     ...row,
     images: row.images.map((photo) => ({ ...photo, url: signedUrls.get(photo.path) || '' })).sort((a, b) => a.sort_order - b.sort_order),
-    videos: row.videos.map((video) => ({ ...video, url: videoUrls.get(video.path) || '' })).sort((a, b) => a.sort_order - b.sort_order),
+    videos: videos.filter(video => video.project_id === row.id).map(({ id, path, caption, sort_order }) => ({ id, path, caption, sort_order, url: videoUrls.get(path) || '' })).sort((a, b) => a.sort_order - b.sort_order),
+    video_uploads_enabled: enabled,
     comparisons: (row.comparisons || []) as ComparisonPair[],
   }));
 }

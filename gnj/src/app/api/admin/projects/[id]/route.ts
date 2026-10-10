@@ -4,6 +4,7 @@ import { readProject } from '@/lib/server/projects';
 import { assertSameOrigin, errorResponse, HttpError, json, readJson } from '@/lib/server/http';
 import { projectPatchSchema, projectSchema, validateProjectRelations } from '@/lib/validation';
 import { PROJECT_BUCKET, PROJECT_VIDEO_BUCKET } from '@/lib/supabase/config';
+import { VIDEO_SETUP_MESSAGE } from '@/lib/server/video-schema';
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -25,6 +26,7 @@ export async function PATCH(request: Request, context: Context) {
     const input = projectPatchSchema.parse(await readJson(request));
     const current = await readProject(client, id);
     if (!current) throw new HttpError(404, 'Project not found.');
+    if (current.video_uploads_enabled === false && input.videos?.length) throw new HttpError(503, VIDEO_SETUP_MESSAGE);
     const project = projectSchema.parse({ ...current, ...input });
     try { validateProjectRelations(project); } catch (error) { throw new HttpError(400, (error as Error).message); }
     for (const image of project.images) {
@@ -35,7 +37,7 @@ export async function PATCH(request: Request, context: Context) {
     }
     const saveData: Record<string, unknown> = { ...project };
     // Detail-only or older clients must not publish pending video uploads.
-    if (input.videos === undefined) delete saveData.videos;
+    if (input.videos === undefined || current.video_uploads_enabled === false) delete saveData.videos;
     const { error } = await client.rpc('save_project', { p_project_id: id, p_data: saveData });
     if (error) throw error;
     const removedPaths = current.images.filter((saved) => !project.images.some((image) => image.id === saved.id)).map((image) => image.path);

@@ -35,6 +35,7 @@ export type Project = {
   cover_image_id: string | null;
   images: ProjectImage[];
   videos: ProjectVideo[];
+  video_uploads_enabled?: boolean;
   comparisons: ComparisonPair[];
   created_at?: string;
   updated_at?: string;

@@ -31,6 +31,7 @@ export function ProjectEditor({ initialProject, navigationGuard, onClose, onSave
   const uploadLock = useRef(false);
   const mediaRevision = useRef(0);
   const previewUrls = useRef(new Set<string>());
+  const videoUploadsEnabled = project.video_uploads_enabled !== false;
   const availableVideoSlots = Math.max(0, MAX_PROJECT_VIDEOS - storedVideoIds.size);
   const hasRemovedVideos = [...storedVideoIds].some(id => !project.videos.some(video => video.id === id));
 
@@ -192,7 +193,7 @@ export function ProjectEditor({ initialProject, navigationGuard, onClose, onSave
 
   async function uploadVideos(files: File[]) {
     if (videoInput.current) videoInput.current.value = '';
-    if (!files.length || uploadLock.current || saving) return;
+    if (!videoUploadsEnabled || !files.length || uploadLock.current || saving) return;
     setError(''); setNotice('');
     if (files.length > availableVideoSlots) {
       setError(hasRemovedVideos ? 'Save your video removals before adding more videos. Each project can have up to two videos.' : 'Each project can have up to two videos. Choose only as many videos as there are spaces available.');
@@ -241,7 +242,7 @@ export function ProjectEditor({ initialProject, navigationGuard, onClose, onSave
     try {
       const { project: saved } = await adminRequest<{ project: Project }>(`/api/admin/projects/${project.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: project.title.trim(), category: project.category, description: project.description.trim(), location: project.location.trim(), featured: project.featured, published, sort_order: project.sort_order, cover_image_id: project.cover_image_id, images: project.images.map(({ id, path, alt, caption }, sort_order) => ({ id, path, alt, caption, sort_order })), videos: project.videos.map(({ id, path, caption }, sort_order) => ({ id, path, caption, sort_order })), comparisons: project.comparisons }),
+        body: JSON.stringify({ title: project.title.trim(), category: project.category, description: project.description.trim(), location: project.location.trim(), featured: project.featured, published, sort_order: project.sort_order, cover_image_id: project.cover_image_id, images: project.images.map(({ id, path, alt, caption }, sort_order) => ({ id, path, alt, caption, sort_order })), ...(videoUploadsEnabled ? { videos: project.videos.map(({ id, path, caption }, sort_order) => ({ id, path, caption, sort_order })) } : {}), comparisons: project.comparisons }),
       });
       setProject(saved); setStoredVideoIds(new Set(saved.videos.map(video => video.id))); setDirty(false); onSaved(saved);
       setNotice(published ? 'Your project is saved and visible on the website.' : 'Your draft is saved. Only you can see it.');
@@ -283,11 +284,12 @@ export function ProjectEditor({ initialProject, navigationGuard, onClose, onSave
           </section>
           <section className="admin-editor-section" aria-labelledby="admin-videos-title">
             <div className="admin-section-title"><span>03</span><div><h2 id="admin-videos-title">Bring your work to life</h2><p>Add up to two videos to share a walkthrough or show your work in motion. This section is optional.</p></div></div>
+            {!videoUploadsEnabled && <p className="admin-help">Video uploads are not available yet. You can still edit and save the rest of this project.</p>}
             <div className="admin-upload-zone">
               <Video size={31} strokeWidth={1.3} /><h3>A different view of your work.</h3>
               <p className="admin-video-count" aria-live="polite">{project.videos.length} of {MAX_PROJECT_VIDEOS} videos added</p>
-              <input ref={videoInput} id="admin-video-upload" className="admin-visually-hidden" type="file" accept={ALLOWED_VIDEO_TYPES.join(',')} multiple disabled={uploading || saving || !availableVideoSlots} onChange={event => void uploadVideos(Array.from(event.target.files ?? []))} />
-              <button className="admin-button admin-button-secondary" onClick={() => videoInput.current?.click()} disabled={uploading || saving || !availableVideoSlots}><Video size={17} />{videoUploading ? 'Uploading videos…' : !availableVideoSlots ? 'Two-video limit reached' : 'Choose videos'}</button>
+              <input ref={videoInput} id="admin-video-upload" className="admin-visually-hidden" type="file" accept={ALLOWED_VIDEO_TYPES.join(',')} multiple disabled={!videoUploadsEnabled || uploading || saving || !availableVideoSlots} onChange={event => void uploadVideos(Array.from(event.target.files ?? []))} />
+              <button className="admin-button admin-button-secondary" onClick={() => videoInput.current?.click()} disabled={!videoUploadsEnabled || uploading || saving || !availableVideoSlots}><Video size={17} />{!videoUploadsEnabled ? 'Video setup pending' : videoUploading ? 'Uploading videos…' : !availableVideoSlots ? 'Two-video limit reached' : 'Choose videos'}</button>
               <small>MP4 or WebM · up to 50 MB each · maximum two videos per project.</small>
             </div>
             {hasRemovedVideos && <p className="admin-help" role="status">Save your changes to finish removing videos and make room for replacements.</p>}

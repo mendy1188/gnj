@@ -32,6 +32,8 @@ values ('REPLACE_WITH_OWNER_USER_UUID');
 
 7. Set the Supabase Authentication Site URL to your deployed site, restart the app, and sign in at `/admin`. Authentication alone does not grant dashboard access: the account must be in `admin_users`. Owner membership cannot be changed by browser clients or user metadata. To revoke owner access, delete that membership row in the SQL Editor.
 
+If the app is deployed before `202610100001_project_videos.sql` is applied, existing projects and photographs remain available and editable. The editor shows “Video setup pending” until the video table is available. Apply that migration in the Supabase SQL Editor, then reopen the project to enable videos. Ordinary project saves preserve any videos added while the editor was waiting for setup.
+
 Once Supabase is configured the database is the source of the portfolio, including when it is empty. A database error does not silently show seed projects. To import the supplied flyer photographs as editable published projects, run this optional, repeat-safe script:
 
 ```sh

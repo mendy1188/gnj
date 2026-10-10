@@ -5,6 +5,7 @@ import { assertSameOrigin, errorResponse, HttpError, json } from '@/lib/server/h
 import { validateProjectVideo } from '@/lib/server/videos';
 import { MAX_PROJECT_VIDEOS, MAX_VIDEO_UPLOAD_BYTES, ALLOWED_VIDEO_TYPES } from '@/lib/videos';
 import { PROJECT_VIDEO_BUCKET, SIGNED_URL_SECONDS } from '@/lib/supabase/config';
+import { isMissingProjectVideos, VIDEO_SETUP_MESSAGE } from '@/lib/server/video-schema';
 
 export const runtime = 'nodejs';
 
@@ -22,7 +23,8 @@ export async function POST(request: Request) {
     const { data: project, error: projectError } = await client.from('projects').select('id').eq('id', projectId).maybeSingle();
     if (projectError) throw projectError;
     if (!project) throw new HttpError(404, 'Save this project before uploading videos.');
-    const { count, error: countError } = await client.from('project_videos').select('id', { count: 'exact', head: true }).eq('project_id', projectId);
+    const { count, error: countError } = await client.from('project_videos').select('id', { count: 'exact' }).eq('project_id', projectId);
+    if (countError && isMissingProjectVideos(countError)) throw new HttpError(503, VIDEO_SETUP_MESSAGE);
     if (countError) throw countError;
     if ((count || 0) >= MAX_PROJECT_VIDEOS) throw new HttpError(400, 'A project can contain up to 2 videos. Save any removals before uploading another.');
     const bytes = Buffer.from(await file.arrayBuffer());

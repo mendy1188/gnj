@@ -33,7 +33,8 @@ import { ProjectEditor } from './src/components/admin/ProjectEditor';
 import { ProjectVideos } from './src/components/project-videos';
 function Fixture() {
   const navigationGuard = useRef(null);
-  return <ProjectEditor initialProject={${JSON.stringify(project)}} navigationGuard={navigationGuard} onClose={() => {}} onSaved={() => {}} />;
+  const initialProject = { ...${JSON.stringify(project)}, ...(window.location.pathname === '/video-setup-pending' ? { video_uploads_enabled: false } : {}) };
+  return <ProjectEditor initialProject={initialProject} navigationGuard={navigationGuard} onClose={() => {}} onSaved={() => {}} />;
 }
 createRoot(document.getElementById('root')).render(window.location.pathname === '/videos' ? <ProjectVideos videos={${JSON.stringify([{ ...videos[1], caption: 'Finished terrace' }, { ...videos[0], caption: 'Garden walkthrough' }])}} /> : window.location.pathname === '/videos-empty' ? <ProjectVideos videos={[]} /> : <Fixture />);
 `;
@@ -62,6 +63,65 @@ test.beforeAll(async () => {
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   baseURL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+});
+
+test('keeps photographs and project details editable while video setup is pending', async ({ page }) => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
+  const image: ProjectImage = {
+    id: '8939b2fb-e87b-4a74-9704-e17c9c7de2c0',
+    path: `${project.id}/8939b2fb-e87b-4a74-9704-e17c9c7de2c0.png`,
+    url: `data:image/png;base64,${png.toString('base64')}`,
+    alt: '', caption: '', sort_order: 0,
+  };
+  let savedPayload: Partial<Project> | undefined;
+  let videoUploadCount = 0;
+  await page.route('**/api/admin/video-uploads', async route => {
+    videoUploadCount++;
+    await route.fulfill({ json: { video: videos[0] } });
+  });
+  await page.route('**/api/admin/uploads', route => route.fulfill({ json: { image } }));
+  await page.route(`**/api/admin/projects/${project.id}`, async route => {
+    if (route.request().method() === 'PATCH') {
+      savedPayload = route.request().postDataJSON() as Partial<Project>;
+      // Setup may finish in another session while this editor is still open.
+      await route.fulfill({ json: { project: { ...project, ...savedPayload, images: [{ ...image, ...savedPayload.images?.[0] }], videos: [videos[0]], video_uploads_enabled: true } } });
+    } else {
+      await route.fulfill({ json: { project: { ...project, video_uploads_enabled: false } } });
+    }
+  });
+
+  await page.goto(`${baseURL}/video-setup-pending`);
+  await expect(page.getByText('Video uploads are not available yet. You can still edit and save the rest of this project.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Video setup pending' })).toBeDisabled();
+  await expect(page.locator('#admin-video-upload')).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Choose photographs' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Save draft' })).toBeEnabled();
+  await page.locator('#admin-video-upload').evaluate(element => {
+    const input = element as HTMLInputElement;
+    const files = new DataTransfer();
+    files.items.add(new File(['test video'], 'walkthrough.mp4', { type: 'video/mp4' }));
+    input.files = files.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.getByLabel('Project title').fill('Garden with a new terrace');
+  await page.getByLabel('Project description').fill('A renovated terrace and freshly planted borders.');
+  await page.locator('#admin-photo-upload').setInputFiles({ name: 'garden.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('.admin-image-editor')).toHaveCount(1);
+  await page.getByLabel('Alternative text').fill('Stone terrace beside a flower border');
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByRole('status')).toContainText('Your draft is saved.');
+
+  expect(savedPayload).toMatchObject({
+    title: 'Garden with a new terrace',
+    description: 'A renovated terrace and freshly planted borders.',
+    cover_image_id: image.id,
+    images: [{ id: image.id, path: image.path, alt: 'Stone terrace beside a flower border', caption: '', sort_order: 0 }],
+  });
+  expect(savedPayload).not.toHaveProperty('videos');
+  expect(videoUploadCount).toBe(0);
+  await expect(page.locator('.admin-video-editor')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Choose videos' })).toBeEnabled();
+  await expect(page.getByText('Video uploads are not available yet. You can still edit and save the rest of this project.')).toHaveCount(0);
 });
 
 test('uploads at most two videos, previews them, and frees removed slots only after saving', async ({ page }) => {

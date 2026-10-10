@@ -10,6 +10,7 @@ const mp4 = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex
 test('video upload API validates limits and cleans storage after a rejected insert', async (t) => {
   let storedCount = 0;
   let inserted: Record<string, unknown> | undefined;
+  let countError: { code: string; message: string } | null = null;
   let insertError: { code: string; message: string } | null = null;
   let signedError = false;
   const uploadedPaths: string[] = [];
@@ -25,7 +26,10 @@ test('video upload API validates limits and cleans storage after a rejected inse
       if (table === 'projects') return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: projectId }, error: null }) }) }) };
       assert.equal(table, 'project_videos');
       return {
-        select: () => ({ eq: async () => ({ count: storedCount, error: null }) }),
+        select: (_columns: string, options?: { head?: boolean }) => {
+          assert.notEqual(options?.head, true, 'The count must use GET so missing-table errors retain their response body');
+          return { eq: async () => ({ count: countError ? null : storedCount, error: countError }) };
+        },
         insert(value: Record<string, unknown>) {
           inserted = value;
           return { select: () => ({ single: async () => ({ data: insertError ? null : value, error: insertError }) }) };
@@ -53,6 +57,17 @@ test('video upload API validates limits and cleans storage after a rejected inse
     return new Request('http://localhost/api/admin/video-uploads', { method: 'POST', body: form });
   }
 
+  await t.test('a missing video migration reports setup instructions before any upload', async () => {
+    countError = { code: 'PGRST205', message: "Could not find the table 'public.project_videos' in the schema cache" };
+    try {
+      const response = await post(request());
+      assert.equal(response.status, 503);
+      assert.match((await response.json()).error, /Complete the video database setup/);
+      assert.deepEqual(uploadedPaths, []);
+      assert.deepEqual(removedPaths, []);
+      assert.equal(inserted, undefined);
+    } finally { countError = null; }
+  });
   await t.test('a third video never reaches storage', async () => {
     storedCount = 2;
     const response = await post(request());
@@ -165,11 +180,14 @@ test('project edits preserve pending videos and save explicit video changes', as
     },
   };
   const projects = await loadProjectRoute('src/app/api/admin/projects/[id]/route.ts', client, current);
+  const projectsWithoutVideos = await loadProjectRoute('src/app/api/admin/projects/[id]/route.ts', client, {
+    ...current, videos: [], video_uploads_enabled: false,
+  });
   const photos = await loadProjectRoute('src/app/api/admin/uploads/[id]/route.ts', client, current);
-  function patch(data: unknown) {
+  function patch(data: unknown, handler = projects.PATCH) {
     saves.length = 0;
     removals.length = 0;
-    return projects.PATCH(new Request(`http://localhost/api/admin/projects/${projectId}`, {
+    return handler(new Request(`http://localhost/api/admin/projects/${projectId}`, {
       method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data),
     }), { params: Promise.resolve({ id: projectId }) });
   }
@@ -181,6 +199,23 @@ test('project edits preserve pending videos and save explicit video changes', as
     assert.equal(saves[0].p_project_id, projectId);
     assert.equal(saves[0].p_data.title, 'Updated garden project');
     assert.equal(Object.hasOwn(saves[0].p_data, 'videos'), false);
+    assert.deepEqual(removals, []);
+  });
+
+  await t.test('an unavailable video schema never sends an empty replacement array to the save RPC', async () => {
+    const response = await patch({ title: 'Saved before video setup', videos: [] }, projectsWithoutVideos.PATCH);
+    assert.equal(response.status, 200);
+    assert.equal(saves.length, 1);
+    assert.equal(saves[0].p_data.title, 'Saved before video setup');
+    assert.equal(Object.hasOwn(saves[0].p_data, 'videos'), false, 'Omitting videos preserves newly available rows if the migration completes between reading and saving');
+    assert.deepEqual(removals, []);
+  });
+
+  await t.test('video edits are rejected with setup instructions when the migration is unavailable', async () => {
+    const response = await patch({ videos: [current.videos[0]] }, projectsWithoutVideos.PATCH);
+    assert.equal(response.status, 503);
+    assert.match((await response.json()).error, /Complete the video database setup/);
+    assert.deepEqual(saves, []);
     assert.deepEqual(removals, []);
   });
 
