@@ -1,6 +1,6 @@
 # GNJ Home & Garden Improvement
 
-A responsive Next.js 16, TypeScript and Tailwind website with a Supabase owner dashboard, private image storage and persistent enquiries.
+A responsive Next.js 16, TypeScript and Tailwind website with a Supabase owner dashboard, private photo/video storage and persistent enquiries.
 
 ## Run locally
 
@@ -18,7 +18,7 @@ Business contact details and introductory copy live in `src/lib/content.ts`. Set
 
 ## Configure Supabase
 
-1. Create a Supabase project. In its SQL Editor, run `supabase/migrations/202609260001_initial.sql` once. Alternatively, link the Supabase CLI to your project and run `supabase db push`.
+1. Create a Supabase project. In its SQL Editor, run each SQL file in `supabase/migrations` once, in filename order. For an existing installation, apply the new `202610100001_project_videos.sql` migration before deploying the video feature. Alternatively, link the Supabase CLI to your project and run `supabase db push`.
 2. In `.env.local`, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from the project's API settings. Legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` is also supported.
 3. Set `SUPABASE_SERVICE_ROLE_KEY` on the server. This is required for validated enquiry submissions, optional starter import and the integration verification script. Never put this secret in a `NEXT_PUBLIC_` variable, browser code or source control.
 4. In Supabase Authentication settings, **disable new user sign-ups**. The website has no registration endpoint or registration interface.
@@ -46,9 +46,11 @@ Create a draft, add photographs, choose a cover and enter alternative text. Save
 
 Uploads accept JPEG, PNG and WebP up to 10 MB and 40 megapixels per file, with up to 60 photographs per project. HEIC files must first be exported as JPEG. The server decodes actual bytes, rejects invalid and animated files, applies camera orientation, removes EXIF/GPS metadata, and creates WebP files up to 1920 pixels on their longest side. Originals are not retained by this application.
 
-Uploads persist immediately, including across devices, but new photographs are pending and invisible to public visitors until saved. Saving uses a single database transaction for the project, image metadata and order, image removal, and comparison pairs. Deleting a project deletes its database gallery and requests storage cleanup. A failed storage cleanup can leave an inaccessible orphan file in the private bucket; it never restores deleted public content. Review such failures in server logs and remove unused files in the Supabase storage dashboard.
+Each project can also contain up to **two videos**, including uploads not yet saved. Upload MP4 or WebM files up to 50 MB each in the editor's video section, add optional captions, arrange them, and save. Videos play in the private preview and public project page with native playback controls. Removing a video takes effect on Save; save a removal before uploading its replacement when both slots are occupied. The API validates file size, MIME type and container headers; videos are stored as uploaded, without transcoding or metadata removal. Codec support depends on the visitor's browser; MP4 with H.264 video and AAC audio is a suitable export choice.
 
-The `project-images` bucket is **private**. Do not switch it to public. RLS restricts drafts, pending photos, and enquiries and authorises all content writes. Public pages use an anonymous database client even when the owner is signed in. Image URLs are signed for five minutes; an already issued URL or a visitor's downloaded copy cannot be immediately revoked when a project is unpublished. New public reads and new signed URLs are denied immediately. Admin routes, API responses and authenticated session refreshes use private/no-store responses. Keep the portfolio pages dynamic so signed URLs are refreshed on page requests.
+Uploads persist immediately, including across devices, but new photographs and videos are pending and invisible to public visitors until saved. Saving uses a single database transaction for the project, photo/video metadata and order, media removal, and comparison pairs. The database enforces the two-video limit even for simultaneous uploads. Deleting a project deletes its database gallery and requests storage cleanup. A failed storage cleanup can leave an inaccessible orphan file in a private bucket; it never restores deleted public content. Review such failures in server logs and remove unused files in the Supabase storage dashboard.
+
+The `project-images` and `project-videos` buckets are **private**. Do not switch them to public. RLS restricts drafts, pending photos/videos, and enquiries and authorises all content writes. Public pages use an anonymous database client even when the owner is signed in. Media URLs are signed for five minutes; an already issued URL or a visitor's downloaded copy cannot be immediately revoked when a project is unpublished. New public reads and new signed URLs are denied immediately. Admin routes, API responses and authenticated session refreshes use private/no-store responses. Keep the portfolio pages dynamic so signed URLs are refreshed on page requests.
 
 ## Enquiry delivery
 
@@ -76,7 +78,7 @@ npm run test:browser
 
 If Chrome is already installed, use `PLAYWRIGHT_CHROME_CHANNEL=chrome npm run test:browser`. The test runner starts a development preview on port 3100. To use an existing preview, set `PLAYWRIGHT_BASE_URL=http://localhost:3000` to its actual address. Gallery tests use isolated, clearly synthetic fixtures that never appear in the public portfolio. The page tests deliberately check the unconfigured service error; they do not submit a real enquiry.
 
-Tests cover enquiry contact validation and limits, timing protection, publication requirements, comparison integrity, image content validation, resizing and metadata stripping. The database test executes the complete SQL migration and policy assertions using PGlite (real PostgreSQL in-process), with minimal stand-ins for Supabase-owned `auth` and `storage` schemas. It checks role isolation, pending-photo privacy, transactional saves and rollback, gallery ordering, cascade deletion and persistent rate limits. It does not simulate Supabase's authentication service, PostgREST relation discovery or Storage HTTP service; those still require the live checks below.
+Tests cover enquiry contact validation and limits, timing protection, publication requirements, comparison integrity, image content validation, resizing and metadata stripping, video container validation, and upload limits and cleanup. The database test executes all SQL migrations and policy assertions using PGlite (real PostgreSQL in-process), with minimal stand-ins for Supabase-owned `auth` and `storage` schemas. It checks role isolation, pending-media privacy, the two-video cap, transactional saves and rollback, gallery ordering, cascade deletion and persistent rate limits. It does not simulate Supabase's authentication service, PostgREST relation discovery or Storage HTTP service; those still require the live checks below.
 
 For actual persistence, storage and RLS verification, set temporary local `GNJ_TEST_OWNER_EMAIL` and `GNJ_TEST_OWNER_PASSWORD` values for an existing owner and run:
 
@@ -86,7 +88,7 @@ npx tsx scripts/verify-supabase.ts
 
 The script reports SKIPPED when credentials are absent. When configured it checks real owner sign-in, a non-owner with forged admin metadata, role-escalation denial, anonymous draft denial, private storage, publish/unpublish, uploads, fresh-session persistence, photo and project order, comparison pairs, enquiry privacy and durable rate limiting. It creates UUID-scoped temporary fixtures and a temporary non-owner account, then removes them. It does not submit the public form or send notification emails. If a run is interrupted, remove the `verification-*` project and `gnj-test-*` account left by that run.
 
-Additional database policy assertions are in `supabase/tests/security.sql`. Run through a PostgreSQL connection with `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/security.sql`. They run in a transaction and roll back their test data. Do not claim these integration checks passed until they have run against your configured database.
+Additional database policy assertions are in `supabase/tests/security.sql` and `supabase/tests/video-security.sql`. Run each through a PostgreSQL connection, for example `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/video-security.sql`. They run in a transaction and roll back their test data. Do not claim these integration checks passed until they have run against your configured database.
 
 Finally, verify on the deployed URL: mobile navigation, service filters, a real enquiry appearing in the dashboard, owner sign-in/sign-out, a saved draft remaining inaccessible when signed out, multi-file uploads and reordering surviving refresh, publish/unpublish, and a genuine before-and-after pair with keyboard/touch slider and full-photo side-by-side views. Form email notifications require a configured provider to verify end to end.
 
@@ -94,6 +96,6 @@ Finally, verify on the deployed URL: mobile navigation, service filters, a real 
 
 Deploy as a Node.js Next.js application, for example on Vercel. Use `npm run build` and `npm run start` on a self-managed host. Add the production environment variables in the hosting dashboard and set `NEXT_PUBLIC_SITE_URL` to the real HTTPS origin before building. Public variables are embedded at build time. Install the Supabase migration and create owner membership before enabling submissions. Use HTTPS, keep service keys server-side, and do not cache `/admin` or `/api/admin` at a reverse proxy.
 
-The upload route accepts 10 MB locally, but Vercel Functions have a [4.5 MB request-body limit](https://vercel.com/docs/functions/limitations#request-body-size), including multipart overhead. Configure a suitable Node host for the advertised 10 MB limit, or lower the UI/server limit to match your host before launch. Do not work around image validation by making the storage bucket public.
+The upload routes accept photographs up to 10 MB and videos up to 50 MB. The host and any reverse proxy must accept those request sizes plus multipart overhead and allow sufficient upload time. Vercel Functions have a [request-body limit](https://vercel.com/docs/functions/limitations#request-body-size) below these advertised limits; use a suitable Node host or lower the UI/server limits to match the deployment. Keep both storage buckets private.
 
 Outstanding external setup: a Supabase project and keys, migrated database, owner account, deployed site URL, and optionally a verified email provider and confirmed service area. Without those credentials, local UI and validation checks can run but live authentication, database persistence and email delivery cannot be fully verified.

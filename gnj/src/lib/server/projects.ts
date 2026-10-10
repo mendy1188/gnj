@@ -1,29 +1,37 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { seedProjects } from '@/lib/content';
-import type { Project, ProjectImage, ComparisonPair } from '@/lib/types';
-import { isSupabaseConfigured, PROJECT_BUCKET, SIGNED_URL_SECONDS } from '@/lib/supabase/config';
+import type { Project, ProjectImage, ProjectVideo, ComparisonPair } from '@/lib/types';
+import { isSupabaseConfigured, PROJECT_BUCKET, PROJECT_VIDEO_BUCKET, SIGNED_URL_SECONDS } from '@/lib/supabase/config';
 import { createPublicSupabaseClient } from '@/lib/supabase/server';
 import { requireAdmin } from './auth';
 import { HttpError } from './http';
 
-type ProjectRow = Omit<Project, 'images'> & { images: Omit<ProjectImage, 'url'>[] };
-const selection = 'id, slug, title, category, description, location, published, featured, sort_order, cover_image_id, created_at, updated_at, images:project_images!project_images_project_id_fkey(id, path, alt, caption, sort_order), comparisons:project_comparisons(id, before_id, after_id, label, aligned)';
+type ProjectRow = Omit<Project, 'images' | 'videos'> & { images: Omit<ProjectImage, 'url'>[]; videos: Omit<ProjectVideo, 'url'>[] };
+const selection = 'id, slug, title, category, description, location, published, featured, sort_order, cover_image_id, created_at, updated_at, images:project_images!project_images_project_id_fkey(id, path, alt, caption, sort_order), videos:project_videos(id, path, caption, sort_order), comparisons:project_comparisons(id, before_id, after_id, label, aligned)';
 
-async function hydrateProjects(client: SupabaseClient, rows: ProjectRow[]): Promise<Project[]> {
-  const paths = [...new Set(rows.flatMap((row) => row.images.map((image) => image.path)))];
+async function signProjectMedia(client: SupabaseClient, bucket: string, paths: string[], label: string) {
   const signedUrls = new Map<string, string>();
   if (paths.length) {
-    const { data, error } = await client.storage.from(PROJECT_BUCKET).createSignedUrls(paths, SIGNED_URL_SECONDS);
-    if (error) throw new HttpError(503, 'Project photographs could not be loaded. Please try again.');
+    const { data, error } = await client.storage.from(bucket).createSignedUrls(paths, SIGNED_URL_SECONDS);
+    if (error) throw new HttpError(503, `Project ${label} could not be loaded. Please try again.`);
     for (const entry of data || []) {
       if (entry.path && entry.signedUrl) signedUrls.set(entry.path, entry.signedUrl);
     }
-    if (paths.some((path) => !signedUrls.has(path))) throw new HttpError(503, 'Some project photographs are unavailable. Please try again.');
+    if (paths.some((path) => !signedUrls.has(path))) throw new HttpError(503, `Some project ${label} are unavailable. Please try again.`);
   }
+  return signedUrls;
+}
+
+async function hydrateProjects(client: SupabaseClient, rows: ProjectRow[]): Promise<Project[]> {
+  const [signedUrls, videoUrls] = await Promise.all([
+    signProjectMedia(client, PROJECT_BUCKET, [...new Set(rows.flatMap((row) => row.images.map((image) => image.path)))], 'photographs'),
+    signProjectMedia(client, PROJECT_VIDEO_BUCKET, [...new Set(rows.flatMap((row) => row.videos.map((video) => video.path)))], 'videos'),
+  ]);
   return rows.map((row) => ({
     ...row,
     images: row.images.map((photo) => ({ ...photo, url: signedUrls.get(photo.path) || '' })).sort((a, b) => a.sort_order - b.sort_order),
+    videos: row.videos.map((video) => ({ ...video, url: videoUrls.get(video.path) || '' })).sort((a, b) => a.sort_order - b.sort_order),
     comparisons: (row.comparisons || []) as ComparisonPair[],
   }));
 }

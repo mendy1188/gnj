@@ -8,6 +8,13 @@ export type ProjectImage = {
   caption: string;
   sort_order: number;
 };
+export type ProjectVideo = {
+  id: string;
+  path: string;
+  url: string;
+  caption: string;
+  sort_order: number;
+};
 export type ComparisonPair = {
   id: string;
   before_id: string;
@@ -27,6 +34,7 @@ export type Project = {
   sort_order: number;
   cover_image_id: string | null;
   images: ProjectImage[];
+  videos: ProjectVideo[];
   comparisons: ComparisonPair[];
   created_at?: string;
   updated_at?: string;

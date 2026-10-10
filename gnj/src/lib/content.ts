@@ -26,5 +26,6 @@ export const seedProjects: Project[] = supplied.map((item, i) => ({
   description: item.description, location: '', published: true, featured: i === 0, sort_order: i,
   cover_image_id: `${item.id}-photo`,
   images: [{ id: `${item.id}-photo`, path: item.image, url: item.image, alt: item.alt, caption: '', sort_order: 0 }],
+  videos: [],
   comparisons: [],
 }));

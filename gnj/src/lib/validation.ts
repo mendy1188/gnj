@@ -1,11 +1,18 @@
 import { z } from 'zod';
 import { categories } from './types';
+import { MAX_PROJECT_VIDEOS } from './videos';
 
 const boundedText = (max: number) => z.string().trim().max(max);
 export const imageSchema = z.object({
   id: z.uuid(),
   path: boundedText(400),
   alt: boundedText(240).default(''),
+  caption: boundedText(500).default(''),
+  sort_order: z.number().int().min(0).max(10000),
+});
+export const videoSchema = z.object({
+  id: z.uuid(),
+  path: boundedText(400).min(1),
   caption: boundedText(500).default(''),
   sort_order: z.number().int().min(0).max(10000),
 });
@@ -23,14 +30,17 @@ export const projectSchema = z.object({
   sort_order: z.number().int().min(0).max(10000),
   cover_image_id: z.uuid().nullable(),
   images: z.array(imageSchema).max(60, 'A project can contain up to 60 photographs.'),
+  videos: z.array(videoSchema).max(MAX_PROJECT_VIDEOS, 'A project can contain up to two videos.').default([]),
   comparisons: z.array(comparisonSchema).max(20),
 });
-export const projectPatchSchema = projectSchema.partial();
+// A partial update must not clear saved videos when this field is omitted.
+export const projectPatchSchema = projectSchema.partial().extend({ videos: projectSchema.shape.videos.unwrap().optional() });
 export const projectCreateSchema = projectSchema.partial().extend({ title: projectSchema.shape.title, category: projectSchema.shape.category });
 
 export function validateProjectRelations(project: z.infer<typeof projectSchema>) {
   const ids = new Set(project.images.map((image) => image.id));
   if (ids.size !== project.images.length) throw new Error('Each photograph must appear only once.');
+  if (new Set(project.videos.map((video) => video.id)).size !== project.videos.length || new Set(project.videos.map((video) => video.path)).size !== project.videos.length) throw new Error('Each video must appear only once.');
   if (new Set(project.comparisons.map((pair) => pair.id)).size !== project.comparisons.length) throw new Error('Each comparison must appear only once.');
   if (project.cover_image_id && !ids.has(project.cover_image_id)) throw new Error('Choose a cover photograph from this project.');
   if (project.comparisons.some((pair) => !ids.has(pair.before_id) || !ids.has(pair.after_id))) throw new Error('Both comparison photographs must belong to this project.');

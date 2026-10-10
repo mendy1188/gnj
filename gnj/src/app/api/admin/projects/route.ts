@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const { client } = await requireAdmin();
     const input = projectCreateSchema.parse(await readJson(request));
-    if (input.published || input.images?.length || input.comparisons?.length) throw new HttpError(400, 'Create a draft first, then upload photographs and publish it.');
+    if (input.published || input.images?.length || input.videos?.length || input.comparisons?.length) throw new HttpError(400, 'Create a draft first, then upload photographs or videos and publish it.');
     const id = randomUUID();
     const { error } = await client.from('projects').insert({
       id, slug: `${slugify(input.title)}-${id.slice(0, 8)}`, title: input.title,

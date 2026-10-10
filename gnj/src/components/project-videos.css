@@ -1,0 +1,12 @@
+.project-videos { margin-top: 60px; }
+.project-videos > h2 { font-size: 45px; margin-bottom: 28px; color: var(--forest); }
+.project-video-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem 1.5rem; }
+.project-video-grid figure { min-width: 0; margin: 0; }
+.project-video-grid figure:only-child { grid-column: 1 / -1; }
+.project-video-grid video { display: block; width: 100%; max-height: 70vh; aspect-ratio: 16 / 9; background: #192314; object-fit: contain; }
+.project-video-grid figcaption { margin-top: .8rem; color: #5a6052; line-height: 1.6; font-size: .9rem; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .project-videos { margin-top: 40px; }
+  .project-videos > h2 { font-size: 36px; }
+  .project-video-grid { grid-template-columns: 1fr; }
+}

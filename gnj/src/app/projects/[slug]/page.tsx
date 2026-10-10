@@ -5,6 +5,8 @@ import { ArrowLeft, ArrowUpRight, MapPin } from 'lucide-react';
 import { Header } from '@/components/header';
 import { Footer } from '@/components/footer';
 import { ProjectGallery } from '@/components/project-gallery';
+import { ProjectVideos } from '@/components/project-videos';
+import '@/components/project-videos.css';
 import { Comparison } from '@/components/comparison';
 import { getPublishedProject } from '@/lib/server/projects';
 
@@ -19,5 +21,5 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProjectPage({ params }: Props) {
   const project = await getPublishedProject((await params).slug);
   if (!project) notFound();
-  return <><Header/><main id="main" className="container project-page"><Link className="back-link" href="/#work"><ArrowLeft size={16}/> Back to our work</Link><div className="project-page-heading"><div><p className="eyebrow">{project.category.toUpperCase()}</p><h1>{project.title}</h1>{project.location && <p className="project-location"><MapPin size={14}/>{project.location}</p>}</div><p className="project-description">{project.description}</p></div><ProjectGallery images={project.images}/>{project.comparisons.length > 0 && <section className="project-comparisons" aria-labelledby="comparisons-heading"><p className="eyebrow">THE DIFFERENCE IN THE DETAILS</p><h2 id="comparisons-heading">Before <em>and after.</em></h2>{project.comparisons.map(pair => <Comparison key={pair.id} pair={pair} images={project.images}/>)}</section>}<div className="project-end-cta"><h2>Something in mind <em>for your home?</em></h2><Link className="button button-primary" href="/#contact">Request a Free Consultation <ArrowUpRight size={18}/></Link></div></main><Footer/></>;
+  return <><Header/><main id="main" className="container project-page"><Link className="back-link" href="/#work"><ArrowLeft size={16}/> Back to our work</Link><div className="project-page-heading"><div><p className="eyebrow">{project.category.toUpperCase()}</p><h1>{project.title}</h1>{project.location && <p className="project-location"><MapPin size={14}/>{project.location}</p>}</div><p className="project-description">{project.description}</p></div><ProjectGallery images={project.images}/><ProjectVideos videos={project.videos}/>{project.comparisons.length > 0 && <section className="project-comparisons" aria-labelledby="comparisons-heading"><p className="eyebrow">THE DIFFERENCE IN THE DETAILS</p><h2 id="comparisons-heading">Before <em>and after.</em></h2>{project.comparisons.map(pair => <Comparison key={pair.id} pair={pair} images={project.images}/>)}</section>}<div className="project-end-cta"><h2>Something in mind <em>for your home?</em></h2><Link className="button button-primary" href="/#contact">Request a Free Consultation <ArrowUpRight size={18}/></Link></div></main><Footer/></>;
 }

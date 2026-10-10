@@ -10,4 +10,5 @@ export function supabaseConfig() {
 }
 
 export const PROJECT_BUCKET = 'project-images';
+export const PROJECT_VIDEO_BUCKET = 'project-videos';
 export const SIGNED_URL_SECONDS = 300;

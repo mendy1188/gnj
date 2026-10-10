@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
-import { enquirySchema, projectSchema, slugify, validateEnquiryTiming, validateProjectRelations } from '../src/lib/validation';
+import { enquirySchema, projectPatchSchema, projectSchema, slugify, validateEnquiryTiming, validateProjectRelations } from '../src/lib/validation';
 
 const enquiry = { name: 'Alex Smith', email: 'alex@example.com', phone: '', service: 'Flooring', message: 'Please help replace the kitchen floor.', website: '', startedAt: Date.now() - 5000 };
 
@@ -60,4 +60,44 @@ test('duplicate gallery references are rejected and slugs remain safe', () => {
   assert.throws(() => validateProjectRelations(project), /only once/);
   assert.equal(slugify('  A garden & patio / update!  '), 'a-garden-patio-update');
   assert.equal(slugify('🌿'), 'project');
+});
+
+function video(sort_order = 0) {
+  const id = randomUUID();
+  return { id, path: `${randomUUID()}/${id}.mp4`, caption: '', sort_order };
+}
+
+test('projects accept up to two videos and default older inputs to an empty list', () => {
+  const project = draft();
+  assert.deepEqual(project.videos, []);
+  assert.equal(projectSchema.safeParse({ ...project, videos: [video()] }).success, true);
+  assert.equal(projectSchema.safeParse({ ...project, videos: [video(), video(1)] }).success, true);
+  const tooMany = projectSchema.safeParse({ ...project, videos: [video(), video(1), video(2)] });
+  assert.equal(tooMany.success, false);
+  if (!tooMany.success) assert.match(tooMany.error.issues[0].message, /two videos/);
+});
+
+test('partial project updates preserve existing videos unless explicitly changed', () => {
+  assert.deepEqual(projectPatchSchema.parse({ title: 'Updated' }), { title: 'Updated' });
+  assert.deepEqual(projectPatchSchema.parse({ videos: [] }), { videos: [] });
+  assert.equal(projectPatchSchema.safeParse({ videos: [video(), video(1), video(2)] }).success, false);
+});
+
+test('video metadata validates captions, paths and ordering', () => {
+  const project = draft();
+  const uploaded = video();
+  const parsed = projectSchema.parse({ ...project, videos: [{ ...uploaded, caption: '  A finished garden  ', url: 'https://example.com/untrusted.mp4' }] });
+  assert.equal(parsed.videos[0].caption, 'A finished garden');
+  assert.equal('url' in parsed.videos[0], false);
+  assert.equal(projectSchema.safeParse({ ...project, videos: [{ ...uploaded, caption: 'a'.repeat(501) }] }).success, false);
+  assert.equal(projectSchema.safeParse({ ...project, videos: [{ ...uploaded, path: '' }] }).success, false);
+  assert.equal(projectSchema.safeParse({ ...project, videos: [{ ...uploaded, sort_order: -1 }] }).success, false);
+});
+
+test('a project cannot attach the same video ID or storage path twice', () => {
+  const project = draft();
+  const uploaded = video();
+  assert.throws(() => validateProjectRelations({ ...project, videos: [uploaded, { ...video(1), id: uploaded.id }] }), /Each video must appear only once/);
+  assert.throws(() => validateProjectRelations({ ...project, videos: [uploaded, { ...video(1), path: uploaded.path }] }), /Each video must appear only once/);
+  assert.doesNotThrow(() => validateProjectRelations({ ...project, videos: [uploaded, video(1)] }));
 });
