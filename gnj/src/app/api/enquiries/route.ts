@@ -26,23 +26,6 @@ export async function POST(request: Request) {
     const { name, email, phone, service, message } = input;
     const { error } = await client.from('enquiries').insert({ name, email, phone, service, message });
     if (error) throw new HttpError(503, 'Your enquiry could not be saved. Please try again, or contact us by phone or email.');
-    // An optional notification failure never loses or invalidates a successfully saved enquiry.
-    if (process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL) {
-      try {
-        const response = await fetch('https://api.resend.com/emails', {
-          method: 'POST', signal: AbortSignal.timeout(5000),
-          headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: process.env.RESEND_FROM_EMAIL,
-            to: [process.env.RESEND_NOTIFICATION_TO || 'Gabor.orban1974@gmail.com'],
-            ...(email ? { reply_to: email } : {}),
-            subject: `GNJ website enquiry: ${service}`,
-            text: `Name: ${name}\nEmail: ${email || 'Not supplied'}\nPhone: ${phone || 'Not supplied'}\nService: ${service}\n\n${message}\n\nThis enquiry is saved in your GNJ owner dashboard.`,
-          }),
-        });
-        if (!response.ok) console.error('Enquiry saved; notification provider returned status', response.status);
-      } catch { console.error('Enquiry saved; email notification could not be sent.'); }
-    }
     return json({ ok: true }, 201);
   } catch (error) { return errorResponse(error); }
 }

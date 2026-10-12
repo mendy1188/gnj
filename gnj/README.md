@@ -62,7 +62,7 @@ Enquiries are validated on the server and saved before a success response. Name,
 
 `TRUSTED_PROXY_IP_HEADER` defaults to `x-vercel-forwarded-for`. On other hosts, set it to the IP header your reverse proxy overwrites; do not trust a header passed unchanged from the visitor. When the header is absent, submissions share a conservative rate-limit bucket. `ENQUIRY_RATE_LIMIT_SALT` can hold a stable random secret; otherwise the server service key is used. Only keyed hashes are stored in the rate-limit table, and old buckets are pruned on requests.
 
-Optional email notifications use Resend. Set `RESEND_API_KEY`, `RESEND_FROM_EMAIL` to an address on a verified sending domain, and optionally `RESEND_NOTIFICATION_TO` (defaults to the business email from the flyer). Notifications are sent only after database persistence. A provider failure is logged; the saved enquiry remains visible in the dashboard. No email is sent when the provider is unconfigured.
+Enquiry submissions do not send email, even if old email-provider environment variables remain configured. Saved entries appear in the owner dashboard under **Enquiries**, with the newest first. The owner can review the message and use the supplied contact details to respond.
 
 ## Checks
 
@@ -90,11 +90,11 @@ For actual persistence, storage and RLS verification, set temporary local `GNJ_T
 npx tsx scripts/verify-supabase.ts
 ```
 
-The script reports SKIPPED when credentials are absent. When configured it checks real owner sign-in, a non-owner with forged admin metadata, role-escalation denial, anonymous draft denial, private storage, publish/unpublish, uploads, fresh-session persistence, photo and project order, comparison pairs, enquiry privacy and durable rate limiting. It creates UUID-scoped temporary fixtures and a temporary non-owner account, then removes them. It does not submit the public form or send notification emails. If a run is interrupted, remove the `verification-*` project and `gnj-test-*` account left by that run.
+The script reports SKIPPED when credentials are absent. When configured it checks real owner sign-in, a non-owner with forged admin metadata, role-escalation denial, anonymous draft denial, private storage, publish/unpublish, uploads, fresh-session persistence, photo and project order, comparison pairs, enquiry privacy and durable rate limiting. It creates UUID-scoped temporary fixtures and a temporary non-owner account, then removes them. It does not submit the public form. If a run is interrupted, remove the `verification-*` project and `gnj-test-*` account left by that run.
 
 Additional database policy assertions are in `supabase/tests/security.sql` and `supabase/tests/video-security.sql`. Run each through a PostgreSQL connection, for example `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/video-security.sql`. They run in a transaction and roll back their test data. Do not claim these integration checks passed until they have run against your configured database.
 
-Finally, verify on the deployed URL: mobile navigation, service filters, a real enquiry appearing in the dashboard, owner sign-in/sign-out, a saved draft remaining inaccessible when signed out, multi-file uploads and reordering surviving refresh, publish/unpublish, and a genuine before-and-after pair with keyboard/touch slider and full-photo side-by-side views. Form email notifications require a configured provider to verify end to end.
+Finally, verify on the deployed URL: mobile navigation, service filters, a real enquiry appearing in the dashboard, owner sign-in/sign-out, a saved draft remaining inaccessible when signed out, multi-file uploads and reordering surviving refresh, publish/unpublish, and a genuine before-and-after pair with keyboard/touch slider and full-photo side-by-side views.
 
 ## Deployment
 
