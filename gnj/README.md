@@ -16,6 +16,10 @@ Open http://localhost:3000. With no Supabase credentials, the public website sho
 
 Business contact details and introductory copy live in `src/lib/content.ts`. Set `NEXT_PUBLIC_SERVICE_AREA` only when GNJ confirms its service area. No location, credentials, customer testimonials or company history have been invented.
 
+For dummy contact details on localhost, set `NEXT_PUBLIC_CONTACT_PHONE=+44 7700 900123` and `NEXT_PUBLIC_CONTACT_EMAIL=hello@example.com` in the ignored `.env.local` file, then restart the development server. The phone link is generated from the displayed number. Leave these overrides unset in Vercel to retain GNJ's live contact details.
+
+Set `HIDE_MYJOBQUOTE=true` in `.env.local` to hide the homepage MyJobQuote logo locally. Leave it unset in Vercel to show the linked logo on desktop and mobile.
+
 ## Configure Supabase
 
 1. Create a Supabase project. In its SQL Editor, run each SQL file in `supabase/migrations` once, in filename order. For an existing installation, apply the new `202610100001_project_videos.sql` migration before deploying the video feature. Alternatively, link the Supabase CLI to your project and run `supabase db push`.

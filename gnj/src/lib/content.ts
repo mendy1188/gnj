@@ -1,10 +1,12 @@
 import type { Project } from './types';
 
+const contactPhone = process.env.NEXT_PUBLIC_CONTACT_PHONE || '+44 7878079245';
+
 export const business = {
   name: 'GNJ Home & Garden Improvement',
-  email: 'Gabor.orban1974@gmail.com',
-  phone: '+44 7878079245',
-  phoneHref: 'tel:+447878079245',
+  email: process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'Gabor.orban1974@gmail.com',
+  phone: contactPhone,
+  phoneHref: `tel:${contactPhone.replace(/[^+\d]/g, '')}`,
   serviceArea: process.env.NEXT_PUBLIC_SERVICE_AREA || '',
   headline: 'Beautiful improvements. Inside and out.',
   introduction: 'From garden transformations and new flooring to bathroom renovations and plumbing, GNJ helps you create a home you’ll love.',

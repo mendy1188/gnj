@@ -52,8 +52,12 @@ test('mobile menu, telephone links and all major layouts fit the viewport', asyn
       await expect(page.locator('#work')).toBeInViewport();
     }
   }
-  await expect(page.locator('a[href="tel:+447878079245"]').first()).toBeVisible();
-  await expect(page.locator('a[href="mailto:Gabor.orban1974@gmail.com"]').first()).toBeVisible();
+  const phone = page.locator('.footer-contact a[href^="tel:"]');
+  const email = page.locator('.footer-contact a[href^="mailto:"]');
+  await expect(phone).toBeVisible();
+  await expect(email).toBeVisible();
+  await expect(phone).toHaveAttribute('href', `tel:${(await phone.innerText()).replace(/[^+\d]/g, '')}`);
+  await expect(email).toHaveAttribute('href', `mailto:${(await email.innerText()).trim()}`);
 });
 
 test('admin configuration is protected and APIs deny unauthenticated writes', async ({ page, request }) => {

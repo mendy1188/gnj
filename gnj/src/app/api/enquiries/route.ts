@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { business } from '@/lib/content';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { createServiceSupabaseClient } from '@/lib/supabase/server';
 import { assertSameOrigin, errorResponse, HttpError, json, readJson } from '@/lib/server/http';
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const input = enquirySchema.parse(await readJson(request));
     if (input.website || !validateEnquiryTiming(input.startedAt)) throw new HttpError(400, 'Please refresh this page and try submitting your enquiry again.');
-    if (!isSupabaseConfigured() || !process.env.SUPABASE_SERVICE_ROLE_KEY) throw new HttpError(503, 'The enquiry form is temporarily unavailable. Please call +44 7878079245 or email Gabor.orban1974@gmail.com.');
+    if (!isSupabaseConfigured() || !process.env.SUPABASE_SERVICE_ROLE_KEY) throw new HttpError(503, `The enquiry form is temporarily unavailable. Please call ${business.phone} or email ${business.email}.`);
     const client = createServiceSupabaseClient();
     // Only trust an IP header that your hosting proxy overwrites. A shared fallback is deliberately conservative.
     const ipHeader = process.env.TRUSTED_PROXY_IP_HEADER || 'x-vercel-forwarded-for';
