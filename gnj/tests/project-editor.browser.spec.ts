@@ -24,7 +24,7 @@ const videos: ProjectVideo[] = [
   '7cdfcfb6-dcf2-478b-b055-d8c6a7c74e68',
   '8ea4e22d-0bbf-4ab9-b803-c476c53f32be',
   '07438ac1-8cf6-4f1d-b1eb-ce940f3e16ec',
-].map((id, index) => ({ id, path: `${project.id}/${id}.mp4`, url: `data:video/mp4;base64,AAAA${index}`, caption: '', sort_order: index }));
+].map((id, index) => ({ id, path: `${project.id}/${id}.${index === 1 ? 'webm' : 'mov'}`, url: `data:${index === 1 ? 'video/webm' : 'video/quicktime'};base64,AAAA${index}`, caption: '', sort_order: index }));
 
 const fixture = `
 import React, { useRef } from 'react';
@@ -141,6 +141,7 @@ test('uploads at most two videos, previews them, and frees removed slots only af
   await page.route('**/api/admin/video-uploads', async route => {
     const payload = route.request().postDataJSON();
     expect(payload.projectId).toBe(project.id);
+    expect(payload.contentType).toBe(payload.id === videos[1].id || (route.request().method() === 'POST' && uploadCount === 1) ? 'video/webm' : 'video/quicktime');
     expect(route.request().headers()['content-type']).toContain('application/json');
     expect(route.request().postDataBuffer()!.length).toBeLessThan(1024);
     if (route.request().method() === 'POST') {
@@ -177,7 +178,7 @@ test('uploads at most two videos, previews them, and frees removed slots only af
   });
 
   await page.goto(baseURL);
-  const first = { name: 'walkthrough.mp4', mimeType: 'video/mp4', buffer: Buffer.alloc(6 * 1024 * 1024) };
+  const first = { name: 'walkthrough.mov', mimeType: 'video/quicktime', buffer: Buffer.alloc(6 * 1024 * 1024) };
   const second = { name: 'finished.webm', mimeType: 'video/webm', buffer: Buffer.alloc(6 * 1024 * 1024) };
   await page.locator('#admin-video-upload').setInputFiles([first, second, first]);
   await expect(page.getByRole('alert')).toContainText('up to two videos');
@@ -256,8 +257,8 @@ test('validates video files and keeps failed uploads recoverable', async ({ page
     await route.fulfill(uploadCount === 1 ? { status: 413, body: 'Request Entity Too Large', headers: { 'Access-Control-Allow-Origin': '*' } } : { json: {}, headers: { 'Access-Control-Allow-Origin': '*' } });
   });
   await page.goto(baseURL);
-  await page.locator('#admin-video-upload').setInputFiles({ name: 'unsupported.mov', mimeType: 'video/quicktime', buffer: Buffer.from('test video') });
-  await expect(page.getByRole('alert')).toContainText('Choose MP4 or WebM videos');
+  await page.locator('#admin-video-upload').setInputFiles({ name: 'unsupported.avi', mimeType: 'video/x-msvideo', buffer: Buffer.from('test video') });
+  await expect(page.getByRole('alert')).toContainText('Choose MP4, WebM or MOV videos');
   await page.locator('#admin-video-upload').evaluate(element => {
     const input = element as HTMLInputElement;
     const data = new DataTransfer();

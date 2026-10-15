@@ -44,7 +44,7 @@ test('database migration, privacy policies and persistence RPCs execute in Postg
       const bucket = (await db.query<{ public: boolean; file_size_limit: number; allowed_mime_types: string[] }>("select public, file_size_limit::integer, allowed_mime_types from storage.buckets where id = 'project-videos'")).rows[0];
       assert.equal(bucket.public, false);
       assert.equal(bucket.file_size_limit, 50 * 1024 * 1024);
-      assert.deepEqual(bucket.allowed_mime_types, ['video/mp4', 'video/webm']);
+      assert.deepEqual(bucket.allowed_mime_types, ['video/mp4', 'video/webm', 'video/quicktime']);
     });
 
     await t.test('saving atomically persists publication, gallery order and comparisons, and rolls back invalid pairs', async () => {
@@ -83,7 +83,7 @@ test('database migration, privacy policies and persistence RPCs execute in Postg
       await db.query('insert into public.admin_users(user_id) values ($1)', [ownerId]);
       await db.query("insert into public.projects(id, slug, title, category) values ($1, 'video-save-test', 'Video project', 'Flooring'), ($2, 'other-video-test', 'Other project', 'Flooring')", [projectId, otherProjectId]);
       await db.query('insert into public.project_images(id, project_id, path) values ($1, $2, $3)', [imageId, projectId, `${projectId}/${imageId}.webp`]);
-      const videos = ids.map((id, index) => ({ id, path: `${projectId}/${id}.${index ? 'webm' : 'mp4'}`, caption: `Finished floor ${index + 1}`, sort_order: 1 - index }));
+      const videos = ids.map((id, index) => ({ id, path: `${projectId}/${id}.${index ? 'webm' : 'mov'}`, caption: `Finished floor ${index + 1}`, sort_order: 1 - index }));
       for (const video of videos) await db.query('insert into public.project_videos(id, project_id, path) values ($1, $2, $3)', [video.id, projectId, video.path]);
       await db.query('insert into public.project_videos(id, project_id, path) values ($1, $2, $3)', [otherId, otherProjectId, `${otherProjectId}/${otherId}.mp4`]);
       const data = { title: 'Finished video project', category: 'Flooring', description: 'A completed flooring project.', location: '', published: true, featured: false, sort_order: 0, cover_image_id: imageId, images: [{ id: imageId, path: `${projectId}/${imageId}.webp`, alt: 'Finished flooring', caption: '', sort_order: 0 }], comparisons: [] };
@@ -138,7 +138,7 @@ test('database migration, privacy policies and persistence RPCs execute in Postg
       await db.query('delete from public.project_videos where id = $1', [ids[0]]);
       await db.query('update public.project_videos set project_id = $1, path = $2 where id = $3', [projectId, `${projectId}/${ids[2]}.mp4`, ids[2]]);
       assert.equal((await db.query<{ slot: number }>('select slot from public.project_videos where id = $1', [ids[2]])).rows[0].slot, 1, 'A deleted slot is reusable when moving a video');
-      await assert.rejects(() => db.query('update public.project_videos set path = $1 where id = $2', [`${projectId}/${ids[2]}.mov`, ids[2]]), /check constraint/);
+      await assert.rejects(() => db.query('update public.project_videos set path = $1 where id = $2', [`${projectId}/${ids[2]}.avi`, ids[2]]), /check constraint/);
       await assert.rejects(() => db.query('update public.project_videos set path = $1 where id = $2', [`${otherProjectId}/${ids[2]}.mp4`, ids[2]]), /check constraint/);
       await assert.rejects(() => db.query('update public.project_videos set sort_order = -1 where id = $1', [ids[2]]), /check constraint/);
       assert.equal((await db.query<{ count: number }>('select count(*)::integer as count from public.project_videos where project_id = $1', [projectId])).rows[0].count, 2);

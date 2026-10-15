@@ -14,9 +14,10 @@ test('video upload API validates limits and cleans storage after a rejected inse
   let insertError: { code: string; message: string } | null = null;
   let signedError = false;
   const uploadedPaths: string[] = [];
+  const uploadedTypes: string[] = [];
   const removedPaths: string[] = [];
   const bucket = {
-    async upload(path: string) { uploadedPaths.push(path); return { error: null }; },
+    async upload(path: string, _bytes: Buffer, options: { contentType: string }) { uploadedPaths.push(path); uploadedTypes.push(options.contentType); return { error: null }; },
     async remove(paths: string[]) { removedPaths.push(...paths); return { error: null }; },
     async createSignedUrl(path: string) { return signedError ? { data: null, error: new Error('Unavailable') } : { data: { signedUrl: `https://media.example/${path}` }, error: null }; },
   };
@@ -50,10 +51,10 @@ test('video upload API validates limits and cleans storage after a rejected inse
   const routeModule = { exports: {} as { POST(request: Request): Promise<Response> } };
   new Function('require', 'module', 'exports', 'fixtureAuth', built.outputFiles[0].text)(createRequire(import.meta.url), routeModule, routeModule.exports, () => ({ client }));
   const post = routeModule.exports.POST;
-  function request(bytes = mp4, type = 'video/mp4') {
+  function request(bytes = mp4, type = 'video/mp4', name = 'walkthrough.mp4') {
     const form = new FormData();
     form.append('projectId', projectId);
-    form.append('file', new File([new Uint8Array(bytes)], 'walkthrough.mp4', { type }));
+    form.append('file', new File([new Uint8Array(bytes)], name, { type }));
     return new Request('http://localhost/api/admin/video-uploads', { method: 'POST', body: form });
   }
 
@@ -97,6 +98,14 @@ test('video upload API validates limits and cleans storage after a rejected inse
     assert.equal(inserted?.is_pending, undefined, 'The database default keeps the video pending until Save');
     assert.equal(video.path, `${projectId}/${video.id}.mp4`);
     assert.equal(video.url, `https://media.example/${video.path}`);
+  });
+  await t.test('multipart MOV uploads normalize a missing MIME type and retain the .mov extension', async () => {
+    const mov = Buffer.from(mp4);
+    mov.write('qt  ', 8);
+    const response = await post(request(mov, '', 'walkthrough.MOV'));
+    assert.equal(response.status, 201);
+    assert.match((await response.json()).video.path, /\.mov$/);
+    assert.equal(uploadedTypes.at(-1), 'video/quicktime');
   });
   await t.test('a simultaneous upload that loses the final slot removes its object', async () => {
     insertError = { code: '23514', message: 'A project can contain up to 2 videos.' };

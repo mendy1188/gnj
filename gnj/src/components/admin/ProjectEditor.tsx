@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, Check, Eye, ImagePlus, Plus, Save, Star, Trash2, UploadCloud, Video, X } from 'lucide-react';
 import { categories, type ComparisonPair, type Project, type ProjectImage, type ProjectVideo } from '@/lib/types';
 import { createUUID } from '@/lib/uuid';
-import { ALLOWED_VIDEO_TYPES, MAX_PROJECT_VIDEOS, MAX_VIDEO_UPLOAD_BYTES } from '@/lib/videos';
+import { ALLOWED_VIDEO_TYPES, MAX_PROJECT_VIDEOS, MAX_VIDEO_UPLOAD_BYTES, getVideoContentType } from '@/lib/videos';
 import { adminRequest } from './api';
 import { ProjectPreview } from './ProjectPreview';
 
@@ -169,9 +169,11 @@ export function ProjectEditor({ initialProject, navigationGuard, onClose, onSave
   }
 
   async function uploadVideo(item: VideoUploadItem): Promise<ProjectVideo> {
+    const contentType = getVideoContentType(item.file);
+    if (!contentType) throw new Error('Choose an MP4, WebM or MOV video.');
     const { upload } = await adminRequest<{ upload: { id: string; path: string; signedUrl: string } }>('/api/admin/video-uploads', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: project.id, contentType: item.file.type, size: item.file.size }),
+      body: JSON.stringify({ projectId: project.id, contentType, size: item.file.size }),
     });
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -193,12 +195,14 @@ export function ProjectEditor({ initialProject, navigationGuard, onClose, onSave
         } catch { reject(new Error('Video storage could not accept this file. Please try again.')); }
       };
       const data = new FormData();
-      data.append('cacheControl', '300'); data.append('', item.file);
+      data.append('cacheControl', '300');
+      const file = item.file.type === contentType ? item.file : new File([item.file], item.file.name, { type: contentType });
+      data.append('', file);
       xhr.send(data);
     });
     const { video } = await adminRequest<{ video: ProjectVideo }>('/api/admin/video-uploads', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: project.id, id: upload.id, contentType: item.file.type }),
+      body: JSON.stringify({ projectId: project.id, id: upload.id, contentType }),
     });
     return video;
   }
@@ -211,8 +215,8 @@ export function ProjectEditor({ initialProject, navigationGuard, onClose, onSave
       setError(hasRemovedVideos ? 'Save your video removals before adding more videos. Each project can have up to two videos.' : 'Each project can have up to two videos. Choose only as many videos as there are spaces available.');
       return;
     }
-    if (files.some(file => !ALLOWED_VIDEO_TYPES.includes(file.type))) {
-      setError('Choose MP4 or WebM videos. Other video formats are not supported.'); return;
+    if (files.some(file => !getVideoContentType(file))) {
+      setError('Choose MP4, WebM or MOV videos. Other video formats are not supported.'); return;
     }
     if (files.some(file => !file.size || file.size > MAX_VIDEO_UPLOAD_BYTES)) {
       setError('Each video must be a non-empty file up to 50 MB.'); return;
@@ -300,9 +304,9 @@ export function ProjectEditor({ initialProject, navigationGuard, onClose, onSave
             <div className="admin-upload-zone">
               <Video size={31} strokeWidth={1.3} /><h3>A different view of your work.</h3>
               <p className="admin-video-count" aria-live="polite">{project.videos.length} of {MAX_PROJECT_VIDEOS} videos added</p>
-              <input ref={videoInput} id="admin-video-upload" className="admin-visually-hidden" type="file" accept={ALLOWED_VIDEO_TYPES.join(',')} multiple disabled={!videoUploadsEnabled || uploading || saving || !availableVideoSlots} onChange={event => void uploadVideos(Array.from(event.target.files ?? []))} />
+              <input ref={videoInput} id="admin-video-upload" className="admin-visually-hidden" type="file" accept={[...ALLOWED_VIDEO_TYPES, '.mp4', '.webm', '.mov'].join(',')} multiple disabled={!videoUploadsEnabled || uploading || saving || !availableVideoSlots} onChange={event => void uploadVideos(Array.from(event.target.files ?? []))} />
               <button className="admin-button admin-button-secondary" onClick={() => videoInput.current?.click()} disabled={!videoUploadsEnabled || uploading || saving || !availableVideoSlots}><Video size={17} />{!videoUploadsEnabled ? 'Video setup pending' : videoUploading ? 'Uploading videos…' : !availableVideoSlots ? 'Two-video limit reached' : 'Choose videos'}</button>
-              <small>MP4 or WebM · up to 50 MB each · maximum two videos per project.</small>
+              <small>MP4, WebM or MOV · up to 50 MB each · maximum two videos per project.</small>
             </div>
             {hasRemovedVideos && <p className="admin-help" role="status">Save your changes to finish removing videos and make room for replacements.</p>}
             {videoUploads.length > 0 && <div className="admin-upload-list" aria-live="polite">{videoUploads.map(upload => <div className="admin-upload-item admin-video-upload-item" key={upload.id}><Video size={28} aria-hidden="true" /><div><strong>{upload.file.name}</strong>{upload.error ? <p className="admin-error-text" role="alert">{upload.error}</p> : <><progress value={upload.progress} max={100} aria-label={`Uploading ${upload.file.name}`} /><span>{upload.progress === 100 ? 'Processing video…' : `${upload.progress}% uploaded`}</span></>}</div>{upload.error && <button className="admin-icon-button" onClick={() => setVideoUploads(current => current.filter(item => item.id !== upload.id))} aria-label={`Dismiss failed upload ${upload.file.name}`}><X size={16} /></button>}</div>)}</div>}

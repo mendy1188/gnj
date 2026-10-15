@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MAX_VIDEO_UPLOAD_BYTES } from '../src/lib/videos';
+import { MAX_VIDEO_UPLOAD_BYTES, getVideoContentType } from '../src/lib/videos';
 import { validateProjectVideo } from '../src/lib/server/videos';
 
 function mp4(brand = 'isom') {
@@ -35,12 +35,47 @@ test('container signatures support extended MP4 sizes and multi-byte EBML sizes'
   assert.equal(validateProjectVideo(multiByteSize, 'video/webm').extension, 'webm');
 });
 
+function atom(type: string, payload: Buffer) {
+  const header = Buffer.alloc(8);
+  header.writeUInt32BE(8 + payload.length);
+  header.write(type, 4);
+  return Buffer.concat([header, payload]);
+}
+
+test('MOV uploads accept QuickTime brands and older atom-based files', () => {
+  assert.deepEqual(validateProjectVideo(mp4('qt  '), 'video/quicktime'), { contentType: 'video/quicktime', extension: 'mov' });
+  const legacy = Buffer.concat([atom('wide', Buffer.alloc(0)), atom('mdat', Buffer.from('media')), atom('moov', atom('mvhd', Buffer.alloc(100)))]);
+  assert.equal(validateProjectVideo(legacy, 'video/quicktime').extension, 'mov');
+  const extended = Buffer.alloc(32);
+  extended.writeUInt32BE(1);
+  extended.write('ftyp', 4);
+  extended.writeUInt32BE(extended.length, 12);
+  mp4('qt  ').copy(extended, 16, 8);
+  assert.equal(validateProjectVideo(extended, 'video/quicktime').extension, 'mov');
+  assert.throws(() => validateProjectVideo(legacy.subarray(0, -1), 'video/quicktime'), /could not be read/);
+  assert.throws(() => validateProjectVideo(atom('moov', Buffer.from('metadata')), 'video/quicktime'), /could not be read/);
+  assert.throws(() => validateProjectVideo(atom('mdat', Buffer.from('media')), 'video/quicktime'), /could not be read/);
+  assert.throws(() => validateProjectVideo(mp4('heic'), 'video/quicktime'), /could not be read/);
+  assert.throws(() => validateProjectVideo(mp4(), 'video/quicktime'), /does not match/);
+  const invalid = mp4('qt  ');
+  invalid.writeUInt32BE(10);
+  assert.throws(() => validateProjectVideo(invalid, 'video/quicktime'), /could not be read/);
+});
+
+test('MOV filenames supply a missing browser MIME type without accepting unrelated MIME types', () => {
+  assert.equal(getVideoContentType({ name: 'garden.MOV', type: '' }), 'video/quicktime');
+  assert.equal(getVideoContentType({ name: 'garden.mov', type: 'application/octet-stream' }), 'video/quicktime');
+  assert.equal(getVideoContentType({ name: 'garden.mov', type: 'video/quicktime' }), 'video/quicktime');
+  assert.equal(getVideoContentType({ name: 'garden.mov', type: 'image/heic' }), null);
+  assert.equal(getVideoContentType({ name: 'garden.avi', type: '' }), null);
+});
+
 test('video uploads reject unrelated bytes, containers and mismatched MIME types', () => {
-  assert.throws(() => validateProjectVideo(Buffer.from('<html>not a video</html>'), 'video/mp4'), /valid MP4 or WebM/);
-  assert.throws(() => validateProjectVideo(mp4('heic'), 'video/mp4'), /valid MP4 or WebM/);
-  assert.throws(() => validateProjectVideo(mp4('qt  '), 'video/mp4'), /valid MP4 or WebM/);
-  assert.throws(() => validateProjectVideo(webm('matroska'), 'video/webm'), /valid MP4 or WebM/);
-  assert.throws(() => validateProjectVideo(mp4(), 'application/octet-stream'), /Choose an MP4 or WebM/);
+  assert.throws(() => validateProjectVideo(Buffer.from('<html>not a video</html>'), 'video/mp4'), /valid MP4, WebM or MOV/);
+  assert.throws(() => validateProjectVideo(mp4('heic'), 'video/mp4'), /valid MP4, WebM or MOV/);
+  assert.throws(() => validateProjectVideo(mp4('qt  '), 'video/mp4'), /does not match/);
+  assert.throws(() => validateProjectVideo(webm('matroska'), 'video/webm'), /valid MP4, WebM or MOV/);
+  assert.throws(() => validateProjectVideo(mp4(), 'application/octet-stream'), /Choose an MP4, WebM or MOV/);
   assert.throws(() => validateProjectVideo(mp4(), 'video/webm'), /does not match/);
   assert.throws(() => validateProjectVideo(webm(), 'video/mp4'), /does not match/);
 });

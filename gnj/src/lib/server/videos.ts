@@ -1,22 +1,44 @@
-import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_UPLOAD_BYTES } from '../videos';
+import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_UPLOAD_BYTES, type VideoContentType } from '../videos';
 
-type VideoFormat = { contentType: 'video/mp4' | 'video/webm'; extension: 'mp4' | 'webm' };
+type VideoFormat = { contentType: VideoContentType; extension: 'mp4' | 'webm' | 'mov' };
 
 const mp4Brands = new Set(['isom', 'iso2', 'iso3', 'iso4', 'iso5', 'iso6', 'iso7', 'iso8', 'iso9', 'mp41', 'mp42', 'avc1', 'dash', 'M4V ', 'M4VH', 'M4VP']);
 
-function hasMp4Header(bytes: Buffer) {
-  if (bytes.length < 16 || bytes.toString('latin1', 4, 8) !== 'ftyp') return false;
-  let size = bytes.readUInt32BE(0);
+function readAtom(bytes: Buffer, offset: number) {
+  if (offset + 8 > bytes.length) return null;
+  let size = bytes.readUInt32BE(offset);
   let headerSize = 8;
   if (size === 1) {
-    if (bytes.length < 24 || bytes.readUInt32BE(8) !== 0) return false;
-    size = bytes.readUInt32BE(12);
+    if (offset + 16 > bytes.length || bytes.readUInt32BE(offset + 8) !== 0) return null;
+    size = bytes.readUInt32BE(offset + 12);
     headerSize = 16;
   }
-  if (size < headerSize + 8 || size > bytes.length || (size - headerSize) % 4 !== 0) return false;
-  // Require an MP4 major brand, rather than accepting other ISO containers
-  // such as HEIF photographs or QuickTime files with an ftyp box.
-  return mp4Brands.has(bytes.toString('latin1', headerSize, headerSize + 4));
+  if (size === 0) size = bytes.length - offset;
+  if (size < headerSize || size > bytes.length - offset) return null;
+  return { type: bytes.toString('latin1', offset + 4, offset + 8), start: offset + headerSize, end: offset + size };
+}
+
+function fileTypeBrand(bytes: Buffer, offset = 0) {
+  const atom = readAtom(bytes, offset);
+  if (!atom || atom.type !== 'ftyp' || atom.end - atom.start < 8 || (atom.end - atom.start) % 4 !== 0) return null;
+  return bytes.toString('latin1', atom.start, atom.start + 4);
+}
+
+function hasQuickTimeHeader(bytes: Buffer) {
+  let offset = 0;
+  let movie = false;
+  let media = false;
+  while (offset < bytes.length) {
+    const atom = readAtom(bytes, offset);
+    if (!atom) return false;
+    if (atom.type === 'ftyp') return fileTypeBrand(bytes, offset) === 'qt  ';
+    // Older QuickTime files have no ftyp atom. Require complete top-level atoms
+    // containing both movie metadata and media, rather than a stray signature.
+    if (atom.type === 'moov' && atom.end > atom.start) movie = true;
+    if (atom.type === 'mdat' && atom.end > atom.start) media = true;
+    offset = atom.end;
+  }
+  return movie && media;
 }
 
 function readEbmlNumber(bytes: Buffer, offset: number, limit: number, isId = false) {
@@ -60,13 +82,14 @@ function hasWebmHeader(bytes: Buffer) {
 
 export function validateProjectVideo(bytes: Buffer, declaredType: string): VideoFormat {
   if (!bytes.length || bytes.length > MAX_VIDEO_UPLOAD_BYTES) throw new Error('Choose a video no larger than 50 MB.');
-  if (!ALLOWED_VIDEO_TYPES.includes(declaredType)) throw new Error('Choose an MP4 or WebM video.');
+  if (!ALLOWED_VIDEO_TYPES.some(type => type === declaredType)) throw new Error('Choose an MP4, WebM or MOV video.');
   // Inspect container headers instead of trusting the upload MIME type. This
   // does not decode the media or guarantee that every browser supports its codec.
-  const format: VideoFormat | null = hasMp4Header(bytes)
+  const format: VideoFormat | null = mp4Brands.has(fileTypeBrand(bytes) || '')
     ? { contentType: 'video/mp4', extension: 'mp4' }
-    : hasWebmHeader(bytes) ? { contentType: 'video/webm', extension: 'webm' } : null;
-  if (!format) throw new Error('This video could not be read. Choose a valid MP4 or WebM video.');
-  if (format.contentType !== declaredType) throw new Error('The video format does not match its file type. Choose an MP4 or WebM video.');
+    : hasWebmHeader(bytes) ? { contentType: 'video/webm', extension: 'webm' }
+      : hasQuickTimeHeader(bytes) ? { contentType: 'video/quicktime', extension: 'mov' } : null;
+  if (!format) throw new Error('This video could not be read. Choose a valid MP4, WebM or MOV video.');
+  if (format.contentType !== declaredType) throw new Error('The video format does not match its file type. Choose an MP4, WebM or MOV video.');
   return format;
 }

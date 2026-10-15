@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/lib/server/auth';
 import { assertSameOrigin, errorResponse, HttpError, json, readJson } from '@/lib/server/http';
 import { validateProjectVideo } from '@/lib/server/videos';
-import { MAX_PROJECT_VIDEOS, MAX_VIDEO_UPLOAD_BYTES, ALLOWED_VIDEO_TYPES } from '@/lib/videos';
+import { MAX_PROJECT_VIDEOS, MAX_VIDEO_UPLOAD_BYTES, ALLOWED_VIDEO_TYPES, VIDEO_EXTENSIONS, getVideoContentType } from '@/lib/videos';
 import { PROJECT_VIDEO_BUCKET, SIGNED_URL_SECONDS } from '@/lib/supabase/config';
 import { isMissingProjectVideos, VIDEO_SETUP_MESSAGE } from '@/lib/server/video-schema';
 
@@ -13,7 +13,7 @@ export const maxDuration = 60;
 
 const uploadSchema = z.object({
   projectId: z.uuid(),
-  contentType: z.enum(['video/mp4', 'video/webm']),
+  contentType: z.enum(ALLOWED_VIDEO_TYPES),
   size: z.number().int().positive().max(MAX_VIDEO_UPLOAD_BYTES, 'Choose a video no larger than 50 MB.'),
 });
 const completionSchema = uploadSchema.omit({ size: true }).extend({ id: z.uuid() });
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       const input = uploadSchema.parse(await readJson(request));
       await assertVideoSlot(client, input.projectId);
       const id = randomUUID();
-      const extension = input.contentType === 'video/mp4' ? 'mp4' : 'webm';
+      const extension = VIDEO_EXTENSIONS[input.contentType];
       const path = `${input.projectId}/${id}.${extension}`;
       const { data, error } = await client.storage.from(PROJECT_VIDEO_BUCKET).createSignedUploadUrl(path, { upsert: false });
       if (error || !data?.signedUrl) {
@@ -59,7 +59,8 @@ export async function POST(request: Request) {
     const file = form.get('file');
     if (!(file instanceof File)) throw new HttpError(400, 'Choose a video to upload.');
     if (file.size > MAX_VIDEO_UPLOAD_BYTES) throw new HttpError(413, 'Choose a video no larger than 50 MB.');
-    if (file.type && !ALLOWED_VIDEO_TYPES.some((type) => type === file.type)) throw new HttpError(415, 'Choose an MP4 or WebM video.');
+    const contentType = getVideoContentType(file);
+    if (!contentType) throw new HttpError(415, 'Choose an MP4, WebM or MOV video.');
     const { data: project, error: projectError } = await client.from('projects').select('id').eq('id', projectId).maybeSingle();
     if (projectError) throw projectError;
     if (!project) throw new HttpError(404, 'Save this project before uploading videos.');
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
     if ((count || 0) >= MAX_PROJECT_VIDEOS) throw new HttpError(400, 'A project can contain up to 2 videos. Save any removals before uploading another.');
     const bytes = Buffer.from(await file.arrayBuffer());
     let format: ReturnType<typeof validateProjectVideo>;
-    try { format = validateProjectVideo(bytes, file.type); } catch (error) { throw new HttpError(400, (error as Error).message); }
+    try { format = validateProjectVideo(bytes, contentType); } catch (error) { throw new HttpError(400, (error as Error).message); }
     const id = randomUUID();
     const path = `${projectId}/${id}.${format.extension}`;
     const bucket = client.storage.from(PROJECT_VIDEO_BUCKET);
@@ -100,7 +101,7 @@ export async function PATCH(request: Request) {
     assertSameOrigin(request);
     const { client } = await requireAdmin();
     const input = completionSchema.parse(await readJson(request));
-    const extension = input.contentType === 'video/mp4' ? 'mp4' : 'webm';
+    const extension = VIDEO_EXTENSIONS[input.contentType];
     const path = `${input.projectId}/${input.id}.${extension}`;
     const { data: existing, error: existingError } = await client.from('project_videos').select('id, path, caption, sort_order').eq('id', input.id).eq('project_id', input.projectId).maybeSingle();
     if (existingError && isMissingProjectVideos(existingError)) throw new HttpError(503, VIDEO_SETUP_MESSAGE);

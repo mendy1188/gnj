@@ -109,6 +109,21 @@ test('direct video uploads validate storage bytes before attaching private video
     assert.equal(videos.has(upload.id), false);
     assert.equal(objects.has(upload.path), false);
   });
+  await t.test('MOV preparation and completion use QuickTime metadata and an immutable .mov path', async () => {
+    const response = await routeModule.exports.POST(request('POST', { projectId, contentType: 'video/quicktime', size: 6 * 1024 * 1024 }));
+    assert.equal(response.status, 201);
+    const { upload } = await response.json();
+    assert.equal(upload.path, `${projectId}/${upload.id}.mov`);
+    const bytes = Buffer.alloc(6 * 1024 * 1024);
+    mp4.copy(bytes);
+    bytes.write('qt  ', 8);
+    objects.set(upload.path, new Blob([bytes], { type: 'video/quicktime' }));
+    const completed = await complete(upload.id, 'video/quicktime');
+    assert.equal(completed.status, 201);
+    assert.equal((await completed.json()).video.path, upload.path);
+    assert.equal(videos.get(upload.id)?.path, upload.path);
+    assert.equal((await complete(upload.id, 'video/quicktime')).status, 200);
+  });
   await t.test('completion checks actual stored size and MIME rather than trusting preparation metadata', async () => {
     for (const [file, status] of [
       [new Blob([new Uint8Array(50 * 1024 * 1024 + 1)], { type: 'video/mp4' }), 413],

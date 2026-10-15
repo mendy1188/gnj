@@ -7,8 +7,8 @@ insert into public.projects(id, slug, title, category, published) values
   ('21000000-0000-4000-8000-000000000001', 'video-security-draft', 'Private video draft', 'Flooring', false),
   ('21000000-0000-4000-8000-000000000002', 'video-security-public', 'Public video project', 'Flooring', true);
 insert into public.project_videos(id, project_id, path, is_pending) values
-  ('31000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001/31000000-0000-4000-8000-000000000001.mp4', false),
-  ('31000000-0000-4000-8000-000000000002', '21000000-0000-4000-8000-000000000002', '21000000-0000-4000-8000-000000000002/31000000-0000-4000-8000-000000000002.webm', false),
+  ('31000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001/31000000-0000-4000-8000-000000000001.mov', false),
+  ('31000000-0000-4000-8000-000000000002', '21000000-0000-4000-8000-000000000002', '21000000-0000-4000-8000-000000000002/31000000-0000-4000-8000-000000000002.mov', false),
   ('31000000-0000-4000-8000-000000000003', '21000000-0000-4000-8000-000000000002', '21000000-0000-4000-8000-000000000002/31000000-0000-4000-8000-000000000003.mp4', true);
 insert into storage.objects(bucket_id, name) select 'project-videos', path from public.project_videos;
 
@@ -18,7 +18,7 @@ do $$ begin
   if (select count(*) from public.project_videos) <> 1 then raise exception 'Anonymous users must see only the saved published video'; end if;
   if not exists(select 1 from public.project_videos where id = '31000000-0000-4000-8000-000000000002') then raise exception 'Published video is inaccessible'; end if;
   if (select count(*) from storage.objects where bucket_id = 'project-videos') <> 1 then raise exception 'Anonymous users can sign draft or pending videos'; end if;
-  if not exists(select 1 from storage.objects where name = '21000000-0000-4000-8000-000000000002/31000000-0000-4000-8000-000000000002.webm') then raise exception 'Published video object is inaccessible'; end if;
+  if not exists(select 1 from storage.objects where name = '21000000-0000-4000-8000-000000000002/31000000-0000-4000-8000-000000000002.mov') then raise exception 'Published video object is inaccessible'; end if;
   begin
     insert into public.project_videos(id, project_id, path) values ('31000000-0000-4000-8000-000000000004', '21000000-0000-4000-8000-000000000001', '21000000-0000-4000-8000-000000000001/31000000-0000-4000-8000-000000000004.mp4');
     raise exception 'Anonymous user can insert videos';
