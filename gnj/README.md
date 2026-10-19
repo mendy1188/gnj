@@ -14,7 +14,7 @@ npm run dev
 
 Open http://localhost:3000. With no Supabase credentials, the public website shows four completed-work photographs from GNJ's supplied flyer. These are genuine reference photographs, not before-and-after pairs. Their original resolution is limited; replace them with full-resolution originals through the dashboard when available. The owner sign-in and enquiry form clearly report missing configuration and never pretend to save data.
 
-Business contact details and introductory copy live in `src/lib/content.ts`. Set `NEXT_PUBLIC_SERVICE_AREA` only when GNJ confirms its service area. No location, credentials, customer testimonials or company history have been invented.
+Business contact details and introductory copy live in `src/lib/content.ts`. The confirmed default service area is Huntingdon, Huntingdonshire, Cambridgeshire and locations within 50 miles of Huntingdon; `NEXT_PUBLIC_SERVICE_AREA` can override this when coverage changes. No location, credentials, customer testimonials or company history have been invented.
 
 For dummy contact details on localhost, set `NEXT_PUBLIC_CONTACT_PHONE=+44 7700 900123` and `NEXT_PUBLIC_CONTACT_EMAIL=hello@example.com` in the ignored `.env.local` file, then restart the development server. The phone link is generated from the displayed number. Leave these overrides unset in Vercel to retain GNJ's live contact details.
 
@@ -101,6 +101,10 @@ The script reports SKIPPED when credentials are absent. When configured it check
 Additional database policy assertions are in `supabase/tests/security.sql` and `supabase/tests/video-security.sql`. Run each through a PostgreSQL connection, for example `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/video-security.sql`. They run in a transaction and roll back their test data. Do not claim these integration checks passed until they have run against your configured database.
 
 Finally, verify on the deployed URL: mobile navigation, service filters, a real enquiry appearing in the dashboard, owner sign-in/sign-out, a saved draft remaining inaccessible when signed out, multi-file uploads and reordering surviving refresh, publish/unpublish, and a genuine before-and-after pair with keyboard/touch slider and full-photo side-by-side views.
+
+## Search visibility
+
+Service landing pages, a crawlable project directory, canonical metadata, structured data and a project-image sitemap target the confirmed Huntingdon service area. See [SEO deployment and measurement](docs/seo.md) for configuration, the Firefox checks and follow-up work after deployment. Run `npm run test:seo` after installing Firefox with `npx playwright install firefox`.
 
 ## Deployment
 

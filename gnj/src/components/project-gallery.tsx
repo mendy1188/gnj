@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight, Expand, X } from 'lucide-react';
 import type { ProjectImage } from '@/lib/types';
 import './gallery.css';
 
-export function ProjectGallery({ images }: { images: ProjectImage[] }) {
+export function ProjectGallery({ images, projectTitle = 'Completed project' }: { images: ProjectImage[]; projectTitle?: string }) {
   const photographs = images.filter((image) => Boolean(image.url)).sort((a, b) => a.sort_order - b.sort_order);
   const dialog = useRef<HTMLDialogElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -39,7 +39,7 @@ export function ProjectGallery({ images }: { images: ProjectImage[] }) {
         {photographs.map((image, index) => (
           <figure className="gal-item" key={image.id}>
             <button className="gal-open" type="button" onClick={() => open(index)} aria-label={`Enlarge photograph ${index + 1}: ${image.alt || image.caption || 'Project photograph'}`} aria-haspopup="dialog">
-              <img src={image.url} alt={image.alt || image.caption || 'Completed project photograph'} loading="lazy" decoding="async" />
+              <img src={image.url} alt={image.alt || image.caption || `${projectTitle} — photograph ${index + 1}`} loading={index === 0 ? "eager" : "lazy"} fetchPriority={index === 0 ? "high" : "auto"} decoding="async" />
               <span className="gal-expand" aria-hidden="true"><Expand size={19} strokeWidth={1.5} /></span>
             </button>
             {image.caption && <figcaption className="gal-caption">{image.caption}</figcaption>}
@@ -67,7 +67,7 @@ export function ProjectGallery({ images }: { images: ProjectImage[] }) {
             <button className="gal-icon-button" type="button" aria-label="Close photograph viewer" onClick={() => dialog.current?.close()} autoFocus><X size={23} strokeWidth={1.5} /></button>
           </div>
           <figure className="gal-full-figure">
-            <img className="gal-full-image" src={currentImage.url} alt={currentImage.alt || currentImage.caption || 'Completed project photograph'} decoding="async" />
+            <img className="gal-full-image" src={currentImage.url} alt={currentImage.alt || currentImage.caption || `${projectTitle} — photograph ${visibleIndex + 1}`} decoding="async" />
             <figcaption className="gal-full-caption">{currentImage.caption || currentImage.alt || 'Project photograph'}</figcaption>
           </figure>
           {photographs.length > 1 && (

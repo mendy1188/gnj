@@ -1,8 +1,8 @@
-import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
 import { Header } from '@/components/header';
 import { Footer } from '@/components/footer';
 import { business } from '@/lib/content';
-export const metadata: Metadata = { title: 'Privacy notice', description: 'How GNJ Home & Garden Improvement uses the information you share when enquiring about a project.' };
+export const metadata = pageMetadata({ title: 'Privacy notice', description: 'How GNJ Home & Garden Improvement uses the information you share when enquiring about a project.', path: '/privacy' });
 export default function Privacy() {
   return <><Header/><main id="main" className="container prose-page"><p className="eyebrow">YOUR INFORMATION</p><h1>Privacy notice</h1><p>When you contact GNJ Home & Garden Improvement, we use the details you provide to respond to your enquiry and discuss your project.</p><h2>What we collect</h2><p>Our enquiry form collects your name, email address or telephone number, selected service and the project description you choose to share. Please avoid including sensitive personal information in your message.</p><h2>How we use your details</h2><p>Enquiries are stored securely using Supabase and reviewed by the business owner in the private admin dashboard. Submitting the form does not send an email. We use your contact details to respond to your request.</p><p>We use a short-lived hashed network identifier to help prevent repeated spam submissions. We do not use the enquiry form to subscribe you to marketing.</p><h2>Cookies</h2><p>The owner dashboard uses essential authentication cookies to keep the owner signed in. This website does not include advertising or analytics cookies.</p><h2>Questions and requests</h2><p>To ask about the information you have shared, request a correction or request deletion, email <a href={`mailto:${business.email}`}>{business.email}</a>. We keep enquiry information only while it is needed to handle your request and any related work.</p></main><Footer/></>;
 }
