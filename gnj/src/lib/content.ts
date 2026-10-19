@@ -7,7 +7,7 @@ export const business = {
   email: process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'Gabor.orban1974@gmail.com',
   phone: contactPhone,
   phoneHref: `tel:${contactPhone.replace(/[^+\d]/g, '')}`,
-  serviceArea: process.env.NEXT_PUBLIC_SERVICE_AREA || '',
+  serviceArea: process.env.NEXT_PUBLIC_SERVICE_AREA || 'Huntingdon, Huntingdonshire, Cambridgeshire and locations within 50 miles of Huntingdon',
   headline: 'Beautiful improvements. Inside and out.',
   introduction: 'From garden transformations and new flooring to bathroom renovations and plumbing, GNJ helps you create a home you’ll love.',
   about: 'A home is made for living. We help make yours work beautifully, with practical improvements inside and out. From the first conversation to the finishing details, we take a thoughtful approach to your space and the way you use it.',

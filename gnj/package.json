@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:browser": "playwright test",
-    "verify:supabase": "tsx scripts/verify-supabase.ts"
+    "verify:supabase": "tsx scripts/verify-supabase.ts",
+    "test:seo": "playwright test --config=playwright.seo.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/cormorant-garamond": "latest",

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import { build } from 'esbuild';
+import { publicImageUrl } from '../src/lib/public-images';
 
 type ProjectQueries = typeof import('../src/lib/server/projects');
 type DatabaseError = { code: string; message: string };
@@ -109,11 +110,11 @@ test('existing projects and signed photographs remain available before the video
         await queries.readProject(fixture.client as unknown as Parameters<ProjectQueries['readProject']>[0], projectId),
       ];
       assert.equal(projects.length, 4);
-      for (const project of projects) {
+      for (const [index, project] of projects.entries()) {
         assert.ok(project);
         assert.equal(project.id, projectId);
         assert.equal(project.title, projectRow.title);
-        assert.equal(project.images[0].url, `https://media.example/project-images/${projectRow.images[0].path}`);
+        assert.equal(project.images[0].url, index < 2 ? publicImageUrl(projectRow, projectRow.images[0]) : `https://media.example/project-images/${projectRow.images[0].path}`);
         assert.deepEqual(project.videos, []);
         assert.equal(project.video_uploads_enabled, false);
       }
@@ -176,7 +177,8 @@ test('unrelated database and storage failures are not hidden as a missing video 
   await t.test('photograph signing errors', async () => {
     const fixture = databaseFixture({ signingError: true });
     const queries = await loadProjectQueries(fixture.client);
-    await assert.rejects(() => queries.getPublishedProjects(), { status: 503 });
+    assert.equal((await queries.getPublishedProjects()).length, 1, 'Public images no longer require temporary photo signing');
+    await assert.rejects(() => queries.getAdminProjects(), { status: 503 });
   });
 });
 
@@ -187,6 +189,21 @@ test('empty project results do not query video metadata', async () => {
   assert.equal(await queries.getPublishedProject('missing-project'), null);
   assert.deepEqual(await queries.getAdminProjects(), []);
   assert.equal(await queries.readProject(fixture.client as unknown as Parameters<ProjectQueries['readProject']>[0], projectId), null);
+  assert.deepEqual(fixture.videoQueries, []);
+  assert.deepEqual(fixture.signed, []);
+});
+
+test('sitemap discovery includes published photos without storage signing or video dependencies', async () => {
+  const fixture = databaseFixture({
+    rows: [projectRow, { ...projectRow, slug: 'private-draft', published: false }],
+    signingError: true,
+    videoError: { code: '42501', message: 'video access unavailable' },
+  });
+  const queries = await loadProjectQueries(fixture.client);
+  const projects = await queries.getSitemapProjects();
+  assert.equal(projects.length, 1);
+  assert.equal(projects[0].slug, projectRow.slug);
+  assert.equal(projects[0].images[0].url, publicImageUrl(projectRow, projectRow.images[0]));
   assert.deepEqual(fixture.videoQueries, []);
   assert.deepEqual(fixture.signed, []);
 });

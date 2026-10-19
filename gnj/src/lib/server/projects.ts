@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { seedProjects } from '@/lib/content';
 import type { Project, ProjectImage, ProjectVideo, ComparisonPair } from '@/lib/types';
@@ -7,6 +8,7 @@ import { createPublicSupabaseClient } from '@/lib/supabase/server';
 import { requireAdmin } from './auth';
 import { HttpError } from './http';
 import { isMissingProjectVideos } from './video-schema';
+import { publicImageUrl } from '@/lib/public-images';
 
 type ProjectRow = Omit<Project, 'images' | 'videos' | 'video_uploads_enabled'> & { images: Omit<ProjectImage, 'url'>[] };
 type VideoRow = Omit<ProjectVideo, 'url'> & { project_id: string };
@@ -38,15 +40,15 @@ async function signProjectMedia(client: SupabaseClient, bucket: string, paths: s
   return signedUrls;
 }
 
-async function hydrateProjects(client: SupabaseClient, rows: ProjectRow[]): Promise<Project[]> {
+async function hydrateProjects(client: SupabaseClient, rows: ProjectRow[], publicImages = false): Promise<Project[]> {
   const { enabled, videos } = await loadProjectVideos(client, rows.map(row => row.id));
   const [signedUrls, videoUrls] = await Promise.all([
-    signProjectMedia(client, PROJECT_BUCKET, [...new Set(rows.flatMap((row) => row.images.map((image) => image.path)))], 'photographs'),
+    publicImages ? Promise.resolve(new Map<string, string>()) : signProjectMedia(client, PROJECT_BUCKET, [...new Set(rows.flatMap((row) => row.images.map((image) => image.path)))], 'photographs'),
     signProjectMedia(client, PROJECT_VIDEO_BUCKET, [...new Set(videos.map(video => video.path))], 'videos'),
   ]);
   return rows.map((row) => ({
     ...row,
-    images: row.images.map((photo) => ({ ...photo, url: signedUrls.get(photo.path) || '' })).sort((a, b) => a.sort_order - b.sort_order),
+    images: row.images.map((photo) => ({ ...photo, url: publicImages ? publicImageUrl(row, photo) : signedUrls.get(photo.path) || '' })).sort((a, b) => a.sort_order - b.sort_order),
     videos: videos.filter(video => video.project_id === row.id).map(({ id, path, caption, sort_order }) => ({ id, path, caption, sort_order, url: videoUrls.get(path) || '' })).sort((a, b) => a.sort_order - b.sort_order),
     video_uploads_enabled: enabled,
     comparisons: (row.comparisons || []) as ComparisonPair[],
@@ -58,16 +60,25 @@ export async function getPublishedProjects(): Promise<Project[]> {
   const client = createPublicSupabaseClient();
   const { data, error } = await client.from('projects').select(selection).eq('published', true).order('sort_order').order('created_at', { ascending: false });
   if (error) throw new HttpError(503, 'The portfolio could not be loaded. Please try again.');
-  return hydrateProjects(client, (data || []) as unknown as ProjectRow[]);
+  return hydrateProjects(client, (data || []) as unknown as ProjectRow[], true);
 }
 
-export async function getPublishedProject(slug: string): Promise<Project | null> {
+export const getPublishedProject = cache(async (slug: string): Promise<Project | null> => {
   if (!isSupabaseConfigured()) return seedProjects.find((project) => project.published && project.slug === slug) || null;
   const client = createPublicSupabaseClient();
   const { data, error } = await client.from('projects').select(selection).eq('published', true).eq('slug', slug).maybeSingle();
   if (error) throw new HttpError(503, 'This project could not be loaded. Please try again.');
   if (!data) return null;
-  return (await hydrateProjects(client, [data as unknown as ProjectRow]))[0];
+  return (await hydrateProjects(client, [data as unknown as ProjectRow], true))[0];
+});
+
+// Sitemap discovery must not depend on signed media or the optional video schema.
+export async function getSitemapProjects(): Promise<Project[]> {
+  if (!isSupabaseConfigured()) return seedProjects.filter(project => project.published);
+  const client = createPublicSupabaseClient();
+  const { data, error } = await client.from('projects').select(selection).eq('published', true).order('sort_order');
+  if (error) throw new HttpError(503, 'The sitemap project list is temporarily unavailable.');
+  return ((data || []) as unknown as ProjectRow[]).map(row => ({ ...row, images: row.images.map(image => ({ ...image, url: publicImageUrl(row, image) })), videos: [] }));
 }
 
 export async function getAdminProjects(): Promise<Project[]> {
