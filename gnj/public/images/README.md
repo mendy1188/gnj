@@ -4,4 +4,4 @@ Source flyer: 1152 × 1600 pixels. Each individual photograph is approximately 3
 
 `scripts/prepare-assets.mjs` reproduces the exact extracts. No scene content has been generated, enhanced or changed.
 
-`myjobquote-logo.png` is the transparent MyJobQuote logo supplied by the user, copied without modification. The homepage links it to https://www.myjobquote.co.uk/.
+`myjobquote-logo.png` is the transparent MyJobQuote logo supplied by the user, copied without modification. The homepage links it to https://www.myjobquote.co.uk/t/gnjgarden.
