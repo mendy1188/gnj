@@ -10,7 +10,7 @@ export const business = {
   serviceArea: process.env.NEXT_PUBLIC_SERVICE_AREA || 'Huntingdon, Huntingdonshire, Cambridgeshire and locations within 50 miles of Huntingdon',
   headline: 'Beautiful improvements. Inside and out.',
   introduction: 'From garden transformations and new flooring to bathroom renovations and plumbing, GNJ helps you create a home you’ll love.',
-  about: 'A home is made for living. We help make yours work beautifully, with practical improvements inside and out. From the first conversation to the finishing details, we take a thoughtful approach to your space and the way you use it.',
+  about: 'I have been in the trade for over 30 years, gaining a wealth of experience and practical knowledge along the way. Having worked in both the UK and Europe, I bring that experience to every project.',
 };
 
 // Genuine completed-work photographs extracted from the supplied GNJ flyer.
