@@ -633,6 +633,7 @@
 
 .admin-enquiry-contacts {
   display:flex;
+  align-items:center;
   flex-wrap:wrap;
   gap:10px 27px;
   border-top:1px solid #eeeeE6;
@@ -646,6 +647,10 @@
   color:var(--admin-green);
   font-size:12px;
   overflow-wrap:anywhere;
+}
+
+.admin-enquiry-contacts .admin-danger {
+  margin-left:auto;
 }
 
 .admin-editor>.admin-back {

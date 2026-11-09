@@ -34,6 +34,10 @@ do $$ begin
     raise exception 'Anonymous visitor can read enquiries';
   exception when insufficient_privilege then null; end;
   begin
+    delete from public.enquiries;
+    raise exception 'Anonymous visitor can delete enquiries';
+  exception when insufficient_privilege then null; end;
+  begin
     insert into public.enquiries(name, email, service, message) values ('Bypass test', 'test@example.invalid', 'Flooring', 'Bypass the server validation.');
     raise exception 'Anonymous visitor can bypass enquiry validation';
   exception when insufficient_privilege then null; end;
@@ -49,6 +53,9 @@ do $$ declare affected integer; begin
   if public.is_admin() then raise exception 'User metadata granted owner access'; end if;
   if exists(select 1 from public.projects where slug = 'security-test-draft') then raise exception 'Non-owner can read drafts'; end if;
   if exists(select 1 from public.enquiries) then raise exception 'Non-owner can read enquiries'; end if;
+  delete from public.enquiries;
+  get diagnostics affected = row_count;
+  if affected <> 0 then raise exception 'Non-owner can delete enquiries'; end if;
   begin
     insert into public.admin_users(user_id) values ('10000000-0000-4000-8000-000000000002');
     raise exception 'User can promote themselves to owner';
@@ -63,10 +70,14 @@ do $$ declare affected integer; begin
 end; $$;
 
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"10000000-0000-4000-8000-000000000001"}', true);
-do $$ begin
+do $$ declare affected integer; begin
   if not public.is_admin() then raise exception 'Owner is not recognised'; end if;
   if not exists(select 1 from public.projects where slug = 'security-test-draft') then raise exception 'Owner cannot read drafts'; end if;
   if not exists(select 1 from public.enquiries where name = 'Security test') then raise exception 'Owner cannot read enquiries'; end if;
+  delete from public.enquiries where name = 'Security test';
+  get diagnostics affected = row_count;
+  if affected <> 1 then raise exception 'Owner cannot delete enquiries'; end if;
+  if exists(select 1 from public.enquiries where name = 'Security test') then raise exception 'Deleted enquiry is still present'; end if;
   if not exists(select 1 from storage.objects where name = '20000000-0000-4000-8000-000000000001/30000000-0000-4000-8000-000000000001.webp') then raise exception 'Owner cannot read draft image'; end if;
   update public.projects set description = 'An authorised change.' where slug = 'security-test-draft';
 end; $$;

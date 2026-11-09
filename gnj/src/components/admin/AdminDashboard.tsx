@@ -70,6 +70,16 @@ export function AdminDashboard({ email }: { email: string }) {
     finally { setBusy(false); }
   }
 
+  async function deleteEnquiry(enquiry: Enquiry) {
+    if (!window.confirm(`Delete the enquiry from “${enquiry.name}”? This cannot be undone.`)) return;
+    setBusy(true); setError('');
+    try {
+      await adminRequest(`/api/admin/enquiries/${enquiry.id}`, { method: 'DELETE' });
+      setEnquiries(current => current.filter(item => item.id !== enquiry.id));
+    } catch (error) { setError(error instanceof Error ? error.message : 'Could not delete this enquiry.'); }
+    finally { setBusy(false); }
+  }
+
   async function moveProject(index: number, direction: number) {
     const reordered = [...projects];
     [reordered[index], reordered[index + direction]] = [reordered[index + direction], reordered[index]];
@@ -102,11 +112,11 @@ export function AdminDashboard({ email }: { email: string }) {
         <div className="admin-content">
           <div className="admin-page-intro"><div><p className="admin-eyebrow">YOUR BUSINESS, BEAUTIFULLY PRESENTED</p><h1>A little care. A lasting impression.</h1><p className="admin-muted">Manage your work and keep every new opportunity in sight.</p></div><span className="admin-account">{email}</span></div>
           <nav className="admin-tabs" aria-label="Dashboard sections">
-            <button className={tab === 'projects' ? 'is-active' : ''} onClick={() => selectTab('projects')} aria-current={tab === 'projects' ? 'page' : undefined}><FolderOpen size={17} /> Your projects</button>
-            <button className={tab === 'enquiries' ? 'is-active' : ''} onClick={() => selectTab('enquiries')} aria-current={tab === 'enquiries' ? 'page' : undefined}><Inbox size={17} /> Enquiries</button>
+            <button className={tab === 'projects' ? 'is-active' : ''} onClick={() => selectTab('projects')} disabled={busy} aria-current={tab === 'projects' ? 'page' : undefined}><FolderOpen size={17} /> Your projects</button>
+            <button className={tab === 'enquiries' ? 'is-active' : ''} onClick={() => selectTab('enquiries')} disabled={busy} aria-current={tab === 'enquiries' ? 'page' : undefined}><Inbox size={17} /> Enquiries</button>
           </nav>
           {error && <div className="admin-error" role="alert">{error} <button className="admin-text-link" onClick={refresh}>Try again</button></div>}
-          <div className="admin-section-heading"><div><h2>{tab === 'projects' ? 'Your project collection' : 'New conversations'}</h2><p className="admin-muted">{tab === 'projects' ? 'Share the details that make your work special.' : 'Enquiries sent through your website, all in one place.'}</p></div><div className="admin-row-actions"><button className="admin-icon-button" aria-label="Refresh dashboard" onClick={refresh} disabled={loading}><RefreshCw size={17} /></button>{tab === 'projects' && <button className="admin-button" onClick={createProject} disabled={busy}><Plus size={17} /> New project</button>}</div></div>
+          <div className="admin-section-heading"><div><h2>{tab === 'projects' ? 'Your project collection' : 'New conversations'}</h2><p className="admin-muted">{tab === 'projects' ? 'Share the details that make your work special.' : 'Enquiries sent through your website, all in one place.'}</p></div><div className="admin-row-actions"><button className="admin-icon-button" aria-label="Refresh dashboard" onClick={refresh} disabled={loading || busy}><RefreshCw size={17} /></button>{tab === 'projects' && <button className="admin-button" onClick={createProject} disabled={busy}><Plus size={17} /> New project</button>}</div></div>
           {loading ? <div className="admin-empty" role="status">Loading your {tab}…</div> : tab === 'projects' ? (
             projects.length ? <div className="admin-project-list">{projects.map((project, index) => {
               const cover = project.images.find(image => image.id === project.cover_image_id) ?? project.images[0];
@@ -116,7 +126,7 @@ export function AdminDashboard({ email }: { email: string }) {
                 <div className="admin-project-actions"><div className="admin-order-controls"><button className="admin-icon-button" aria-label={`Move ${project.title} up`} disabled={index === 0 || busy} onClick={() => moveProject(index, -1)}><ArrowUp size={16} /></button><button className="admin-icon-button" aria-label={`Move ${project.title} down`} disabled={index === projects.length - 1 || busy} onClick={() => moveProject(index, 1)}><ArrowDown size={16} /></button></div><button className="admin-button admin-button-secondary" onClick={() => setEditing(project)}>Edit project</button><button className="admin-icon-button admin-danger" onClick={() => deleteProject(project)} disabled={busy} aria-label={`Delete ${project.title}`}><Trash2 size={17} /></button></div>
               </article>;
             })}</div> : <div className="admin-empty"><FolderOpen size={33} strokeWidth={1.2} /><h3>Your next project starts here.</h3><p>Add photographs, tell the story, and publish when you’re ready.</p><button className="admin-button" disabled={busy} onClick={createProject}><Plus size={16} /> Add your first project</button></div>
-          ) : enquiries.length ? <div className="admin-enquiry-list">{enquiries.map(enquiry => <article className="admin-enquiry" key={enquiry.id}><div className="admin-enquiry-heading"><div><span className="admin-eyebrow">{enquiry.service || 'GENERAL ENQUIRY'}</span><h3>{enquiry.name}</h3></div><time dateTime={enquiry.created_at}>{new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(enquiry.created_at))}</time></div><p className="admin-enquiry-message">{enquiry.message}</p><div className="admin-enquiry-contacts">{enquiry.email && <a href={`mailto:${enquiry.email}`}>{enquiry.email}<ArrowUpRight size={14} /></a>}{enquiry.phone && <a href={`tel:${enquiry.phone.replace(/[^+\d]/g, '')}`}>{enquiry.phone}<ArrowUpRight size={14} /></a>}</div></article>)}</div> : <div className="admin-empty"><Inbox size={33} strokeWidth={1.2} /><h3>A home for new conversations.</h3><p>Customer enquiries will appear here when they arrive.</p></div>}
+          ) : enquiries.length ? <div className="admin-enquiry-list">{enquiries.map(enquiry => <article className="admin-enquiry" key={enquiry.id}><div className="admin-enquiry-heading"><div><span className="admin-eyebrow">{enquiry.service || 'GENERAL ENQUIRY'}</span><h3>{enquiry.name}</h3></div><time dateTime={enquiry.created_at}>{new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(enquiry.created_at))}</time></div><p className="admin-enquiry-message">{enquiry.message}</p><div className="admin-enquiry-contacts">{enquiry.email && <a href={`mailto:${enquiry.email}`}>{enquiry.email}<ArrowUpRight size={14} /></a>}{enquiry.phone && <a href={`tel:${enquiry.phone.replace(/[^+\d]/g, '')}`}>{enquiry.phone}<ArrowUpRight size={14} /></a>}<button className="admin-button admin-button-secondary admin-danger" onClick={() => deleteEnquiry(enquiry)} disabled={busy} aria-label={`Delete enquiry from ${enquiry.name}`}><Trash2 size={17} /> Delete</button></div></article>)}</div> : <div className="admin-empty"><Inbox size={33} strokeWidth={1.2} /><h3>A home for new conversations.</h3><p>Customer enquiries will appear here when they arrive.</p></div>}
           <footer className="admin-footer"><Link href="/" className="admin-back"><ArrowLeft size={15} /> Back to GNJ</Link><span>Thoughtful improvements, inside and out.</span></footer>
         </div>
       )}
