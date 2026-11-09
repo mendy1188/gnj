@@ -9,6 +9,7 @@ test('enquiry deletion validates access and only reports confirmed deletions', a
   const saved = new Set([id, otherId]);
   let authStatus = 200;
   let databaseFails = false;
+  let deletePermissionMissing = false;
   let databaseCalls = 0;
   const client = {
     from(table: string) {
@@ -19,6 +20,7 @@ test('enquiry deletion validates access and only reports confirmed deletions', a
         return { select(columns: string) {
           assert.equal(columns, 'id');
           return { async maybeSingle() {
+            if (deletePermissionMissing) return { data: null, error: { code: '42501', message: 'permission denied for table enquiries' } };
             if (databaseFails) return { data: null, error: new Error('Database unavailable') };
             return { data: saved.delete(value) ? { id: value } : null, error: null };
           } };
@@ -55,6 +57,14 @@ test('enquiry deletion validates access and only reports confirmed deletions', a
     assert.equal((await remove('invalid')).status, 400);
     assert.equal(databaseCalls, 0);
     assert.equal(saved.size, 2);
+  });
+  await t.test('missing delete permissions explain the required database setup without deleting anything', async () => {
+    deletePermissionMissing = true;
+    const response = await remove();
+    assert.equal(response.status, 503);
+    assert.match((await response.json()).error, /finish the database setup/);
+    assert.equal(saved.size, 2);
+    deletePermissionMissing = false;
   });
   await t.test('database failure retains the enquiry and returns an error', async () => {
     databaseFails = true;
